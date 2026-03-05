@@ -28,8 +28,9 @@ Jing Zhang<sup>2 †</sup>.
 
 ## 🔥 Update
 
-**2025.11.25**
-- The paper is post on arXiv! **([arXiv 2511,23332](https://arxiv.org/abs/2511.23332))** 
+- **[2026.03]** 🎉 Our paper has been **accepted to CVPR 2026**!
+- **[2025.11]** 📄 Paper available on arXiv: **[arXiv:2511.23332](https://arxiv.org/abs/2511.23332)**
+
 
 ## 🌞 Abstract
 
@@ -91,7 +92,7 @@ python scripts/eval.sh
 
 ## ⭐ Citation
 
-If you find GeoZero helpful, please give a ⭐ and cite it as follows:
+If you find UniGeoSeg helpful, please give a ⭐ and cite it as follows:
 
 ```
 @misc{ni2025unigeosegunifiedopenworldsegmentation,
