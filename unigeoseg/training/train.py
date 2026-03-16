@@ -19,7 +19,6 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     if model_args.mm_vision_tower is None and model_args.vision_tower is not None:
         model_args.mm_vision_tower = model_args.vision_tower
-    training_args.dataloader_num_workers = data_args.dataloader_num_workers
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
