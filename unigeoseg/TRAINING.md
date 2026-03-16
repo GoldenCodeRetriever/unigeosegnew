@@ -25,6 +25,7 @@ This repository now includes a full training pipeline aligned to the paper `UniG
 
 - Module entry: `python -m unigeoseg.training.train`
 - Local wrapper: `python train.py`
+- Bash launcher: `bash scripts/train_paper.sh`
 
 ## Supported datasets
 
