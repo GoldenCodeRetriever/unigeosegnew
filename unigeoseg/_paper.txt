@@ -1,0 +1,1404 @@
+                                          UniGeoSeg: Towards Unified Open-World Segmentation for Geospatial Scenes
+
+                                                         Shuo Ni1,3 , Di Wang2,3 , He Chen1 , Haonan Guo2,3† , Ning Zhang1,4† , Jing Zhang2†
+                                                                       1
+                                                                         Beijing Institute of Technology, 2 Wuhan University,
+                                                                3
+                                                                   Zhongguancun Academy, 4 Hong Kong Polytechnic University
+                                           3120245503@bit.edu.cn; haonan.guo@whu.edu.cn; nzhang.rs@bit.edu.cn; jingzhang.cv@gmail.com
+arXiv:2511.23332v1 [cs.CV] 28 Nov 2025
+
+
+
+
+                                                                      Abstract
+
+                                         Instruction-driven segmentation in remote sensing gener-
+                                         ates masks from guidance, offering great potential for ac-
+                                         cessible and generalizable applications. However, exist-
+                                         ing methods suffer from fragmented task formulations and
+                                         limited instruction data, hindering effective understand-
+                                         ing and generalization. To address these issues, we in-
+                                         troduce GeoSeg-1M, the first million-scale dataset for re-
+                                         mote sensing instruction-driven segmentation, constructed
+                                         via an automatic mask filtering and instruction generation
+                                         pipeline that synthesizes referring, interactive, and reason-
+                                         ing segmentation instructions from multiple public datasets.
+                                         GeoSeg-1M contains 590K images, 117 categories, and
+                                         1.1M image–mask–instruction triplets. Building upon this
+                                         foundation, we further curate GeoSeg-Bench, a challeng-
+                                         ing benchmark designed to evaluate contextual understand-
+                                         ing and reasoning capabilities across diverse instruction-
+                                         driven tasks and complex geospatial scenes. Furthermore,
+                                         we present UniGeoSeg, a unified framework that serves as
+                                                                                                              Figure 1. Examples from GeoSeg-1M. (a) Referring segmentation;
+                                         a strong baseline, incorporating task-aware text enhance-            (b) Interactive segmentation; (c) Attribute-oriented reasoning seg-
+                                         ment, latent knowledge memory, and a progressive training            mentation; (d) Context-oriented reasoning segmentation.
+                                         strategy to facilitate multi-task learning. Extensive experi-
+                                         ments demonstrate the state-of-the-art performance of Uni-
+                                         GeoSeg across GeoSeg-Bench and diverse public bench-                 monitoring [5, 47], and disaster assessment [1, 61].
+                                         marks, while exhibiting strong zero-shot generalization.                 Recent studies have explored instruction-driven seg-
+                                         Datasets and source code were released at UniGeoSeg.                 mentation for RS. For instance, RRSIS-D [33] achieves
+                                                                                                              referring segmentation via multimodal alignment, while
+                                                                                                              SegEarth-R1 [29] introduces geographic reasoning segmen-
+                                         1. Introduction                                                      tation. Inspired by the Segment Anything Model (SAM)
+                                         Instruction-driven segmentation aims to generate pixel-              [23], several methods incorporate visual prompting to en-
+                                         level masks guided by natural language instructions, en-             hance flexibility and enable adaptive guidance [60, 77].
+                                         abling intuitive and human-centric interaction with vi-              Despite these efforts, research on instruction-driven seg-
+                                         sual data. In the field of remote sensing (RS), this                 mentation remains constrained by fragmented task formula-
+                                         paradigm greatly improves the accessibility and practical-           tions, hindering comprehensive instruction understanding.
+                                         ity of geospatial analysis by enabling flexible segmentation         Specifically, existing models often focus on single-purpose
+                                         of instruction-specified regions. It holds broad potential for       segmentation without leveraging the complementary among
+                                         applications such as urban planning [17, 65], environmental          different tasks, thereby limiting cross-task transferability
+                                                                                                              [9, 36]. Moreover, current datasets lack sufficient data scale
+                                           † Corresponding authors.                                           and diversity in both visual and textual domains, imped-
+
+
+                                                                                                          1
+ing robust generalization to complex geospatial instructions          that UniGeoSeg achieves state-of-the-art performance
+[40, 48]. Consequently, these models struggle with open-              across GeoSeg-Bench and multiple public benchmarks,
+world understanding, particularly when reasoning over in-             serving as a strong foundation for instruction-driven
+tricate contextual information [41, 72].                              geospatial segmentation research.
+    To address these challenges, we introduce GeoSeg-1M,
+a large-scale, multi-task instruction-driven segmentation           2. Related Work
+dataset for holistic and comprehensive geospatial under-
+                                                                    2.1. Instruction-Driven Segmentation
+standing. The dataset comprises 590K RS images, 117
+semantic categories, and 1.1M image–mask–instruction                Early methods [19, 30, 50] typically extracted visual and
+triplets, covering a wide spectrum of real-world scenes and         textual features separately with convolutional and recur-
+object types. Some examples are shown in Fig. 1. To                 rent networks, followed by feature fusion for segmenta-
+construct GeoSeg-1M, we design a comprehensive and au-              tion. Transformer-based approaches [39, 66, 70] further im-
+tomated pipeline for mask filtering and instruction gen-            proved cross-modal semantic alignment via attention mech-
+eration that automatically produces referring, interactive,         anisms. SAM [23] introduced visual prompting, enabling
+and reasoning segmentation instructions in a unified man-           open-world and interactive segmentation. LISA [25] incor-
+ner. By leveraging multiple large language models (LLMs)            porated large multimodal models and proposed reasoning-
+and integrating heterogeneous public datasets, this pipeline        based segmentation tasks, while PSALM [80] designed
+constructs context-rich and semantically aligned supervi-           well-structured input schemas to support multiple tasks, in-
+sion, effectively bridging language, vision, and spatial rea-       cluding video referring segmentation and open-vocabulary
+soning to facilitate multi-task learning. Furthermore, to           segmentation. However, due to the substantial semantic gap
+provide a consistent evaluation protocol and better as-             between natural images and RS imagery [36], these meth-
+sess model understanding and reasoning abilities in com-            ods often fail to generalize well on geospatial scenes.
+plex geospatial environments, we curate GeoSeg-Bench,
+a high-quality, challenging benchmark designed to assess            2.2. Instruction-Driven Segmentation for RS
+instruction-driven segmentation in real scene across diverse        To enable instruction-driven in the geospatial domain, Yuan
+tasks including referring, interactive, and reasoning.              et al. [74] constructed the first referring segmentation
+    Building upon this foundation, we further propose Uni-          dataset tailored to RS imagery. Liu et al. [33] subsequently
+GeoSeg, a unified framework that serves as a strong base-           built RRSIS-D based on RSVG dataset [75] and SAM.
+line for RS instruction-driven segmentation. To seamlessly          SegEarth-OV [27] leveraged a CLIP-based [43], training-
+adapt to diverse segmentation scenarios and bridge differ-          free architecture to achieve open-vocabulary segmentation.
+ent task types, UniGeoSeg incorporates three key compo-             GeoPixel [48] introduced grounded conversation genera-
+nents: a task-aware text enhancement module that refines            tion by incorporating powerful LLMs, enabling instruction-
+instruction comprehension across heterogeneous tasks, a la-         guided segmentation with richer textual context. More re-
+tent knowledge memory module that facilitates semantic              cently, Segearth-R1 [29] further proposed geospatial pixel
+sharing among tasks, and a progressive training strategy            reasoning, requiring world knowledge to complete segmen-
+that incrementally increases task difficulty to enhance gen-        tation tasks. Despite these advances, existing instruction-
+eralization. Extensive experiments verify that UniGeoSeg            driven segmentation methods remain largely task-specific,
+achieves state-of-the-art results on GeoSeg-Bench and other         limiting the capability to handle complex instructions across
+public benchmarks, and exhibits strong zero-shot adaptabil-         diverse geospatial scenarios.
+ity and open-world generalization. Our main contributions
+are summarized as follows:                                          2.3. Large Multimodal Models for RS
+• We introduce GeoSeg-1M, the first million-scale                   Large multimodal models have recently emerged to advance
+   instruction-driven segmentation RS dataset. It unifies           geospatial understanding. RSGPT [20] was the first to gen-
+   referring, interactive, and reasoning segmentation tasks         erate detailed image descriptions in RS via natural language
+   with 1.1M image–mask–instruction triplets. Besides,              dialogue. GeoChat [24] extended this by supporting region-
+   we curate a challenging benchmark GeoSeg-Bench                   specific inputs and responding with bounding boxes for pre-
+   emphasizing spatial and contextual reasoning.                    cise visual localization. EarthGPT [78] and EarthDial [53]
+• We propose UniGeoSeg, a unified framework for                     integrate various multi-sensor RS interpretation tasks within
+   instruction-driven segmentation, which integrates task-          a large language and multimodal framework. SkySenseGPT
+   aware text enhancement, latent knowledge memory mod-             [37] contributes image-level scene graph generation and re-
+   ule, and progressive training to facilitate comprehensive        lationship reasoning, while LHRS-Bot [38] enhances multi-
+   multi-task representation and understanding.                     level vision-language alignment. On the other hand, Geopix
+• Extensive and comprehensive experiments demonstrate               [40] and GeoPixel [48] extended multimodal interaction to
+
+                                                                2
+                       Table 1. Comparison of GeoSeg-1M with existing RS multimodal segmentation datasets.
+
+  Dataset           Images    Samples    Avg Text Length      Categories     Spatial Resolution     Dataset Resource1      Task Types
+  RefSegRS[74]       285       4.4 K        3.09 words           14            0.5 m – 30 m                S               Referring
+  RRSIS-D[33]        17 K       17 K         6.8 words            20              0.13 m                 R, DI             Referring
+  RISBench[15]       29 K      52 K         15.3 words           26            0.1 m – 30 m             DO, DI             Referring
+  RemoteSAM[71]      71 K      270 K         6.9 words           297          0.05 m – 30 m       DO, DI, Vi, L, P, S, H   Referring
+  EarthReason[29]    5K        14 K        20.89 words           28           0.5 m – 153 m             A, FM              Reasoning
+                                                                                                    C, DG, FB, FL, GI,
+                                                                                                                            Referring/
+                                            12.18 words                                            GL, L, M, P, Va, FA
+  GeoSeg-1M          590 K    1,149 K                            117          0.05 m – 153 m                               Interactive/
+                                        (12.05/9.80/23.93)2                                       DO, DI, EeathReason,
+                                                                                                                           Reasoning
+                                                                                                  RemoteSAM, RRSIS-D
+
+1 S:SkyScapes [2], R:RSVGD [55], DI:DIOR [26], DO:DOTA [68], Vi:VisDrone [16], L:LoveDA [62], P:Potsdam [3], H:HRRSD [79],
+A:AID [67], FM:fMoW [13], C:Chesapeake [46], DG:DeepGlobe [14], FB:Five-Billion-Pixel [57], FL:FLAIR [18], GI:GID-15 [56],
+GL:Globe230K [51], M:MiniFrance [8], Va:Vaihingen [3], FA:FAIR1M [54].
+2 Numbers in parentheses denote the average text length for the referring, interactive, and reasoning tasks, respectively.
+
+
+pixel-level outputs, producing guided segmentation masks.              automated textual instructions generation and quality con-
+Despite these efforts, most existing geospatial multimodal             trol. Specifically, instructions are generated by GPT-4o [21]
+models either lack pixel-level segmentation capabilities or            and subsequently cross-evaluated by open-source models
+are limited to segmentation tasks without contextual reason-           (InternVL3-78B [82] and QwenVL2-72B [64]) to ensure
+ing. This results in restricted task coverage and insufficient         clarity, alignment, and reasoning depth. Task-specific gen-
+integration of instruction understanding, visual grounding,            eration pipelines for reasoning, referring, and interactive
+and pixel-level output. Therefore, there is a growing need             segmentation are designed as follows.
+for unified frameworks capable of jointly addressing in-                   Reasoning segmentation data. We first select semanti-
+struction comprehension, high-level reasoning, and fine-               cally diverse images with rich category coverage. For each
+grained segmentation in complex geospatial scenes.                     masked region that no other region of the same category ex-
+                                                                       ists, GPT-4o is prompted with category list of the image to
+3. The GeoSeg-1M Dataset and GeoSeg-Bench                              generate a reasoning question focusing on its attributes or
+                                                                       functional roles. Such cases are defined as attribute reason-
+3.1. Data Curation and Filtering                                       ing samples. If one or two additional same-category regions
+We curate a large-scale multimodal segmentation dataset                exist, the case is treated as a contextual reasoning sample,
+GeoSeg-1M consisting of 590K unique images, 117cate-                   with regions highlighted in distinct colors. GPT-4o is then
+gories, and 1.1M image-mask-instruction triplets. GeoSeg-              instructed to describe their salient spatial relations and gen-
+1M is built by integrating multiple RS datasets with pixel-            erate a question requiring contextual or relational reason-
+level annotations, as reported in Tab. 1 for a full list. All          ing. All image–mask–question triplets are cross-evaluated
+datasets were standardized into a unified annotation format.           by open-source models, and only high-quality samples are
+   Although many RS datasets provide pixel-level annota-               retained. Owing to the stricter semantic filtering, the result-
+tions, their masks often contain fragmented regions, impre-            ing reasoning dataset contains approximately 105k samples.
+cise boundaries, and inconsistent class labels. Such noise                 Referring segmentation data. We design specialized
+degrades supervision quality. To address this issue, we                prompts that guide GPT-4o to generate referring expres-
+developed a systematic mask filtering pipeline that refines            sions emphasizing spatial and contextual grounding rather
+raw annotations by decomposing masks into connected re-                than direct visual mention. This design encourages descrip-
+gions, removing unreliable areas, and automatically evalu-             tions involving relative positions, neighboring context, and
+ating the remaining ones using InternVL3 [82] through a                inter-object spatial relations, thereby enriching the spatial
+designed prompt (see Supplementary Material for details).              semantics expressed in the dataset. The generated expres-
+Only high-quality masks are preserved for subsequent in-               sions are then cross-scored to ensure linguistic clarity and
+struction generation.                                                  visual–textual consistency. The final referring segmentation
+                                                                       dataset contains approximately 336k samples.
+3.2. Instruction Generation                                                Interactive segmentation data. Fixed-format textual
+To construct multimodal segmentation instructions, we em-              instructions are generated directly from mask geometry.
+ploy a two-stage framework that utilized high-performance              Bounding boxes are defined as tight enclosing rectangles,
+proprietary and open-source vision–language models for                 and one to three random points are sampled within each
+
+
+                                                                 3
+          Figure 2. The diagram of UniGeoSeg. The top indicates the whole pipeline, and the bottom describes each module.
+
+
+mask. These textual prompts simulate point- or box-based             multimodal segmentation models.
+user interactions, yielding approximately 481k interactive
+samples. Comprehensive descriptions of the generation and
+                                                                     3.4. Benchmark
+quality-control pipelines, as well as the prompts used for           We carefully curate GeoSeg-Bench, a benchmark build-
+each stage, are included in the Supplementary Material.              ing upon GeoSeg-1M, which containes 2,870 interactive,
+   In addition, to further enrich the dataset and improve            2,311 referring, and 1,711 reasoning segmentation samples.
+coverage across diverse segmentation tasks, we incor-                Each sample is manually cross-validated by two domain ex-
+porate the training splits of existing RS referring and              perts, ensuring high-quality image–mask–instruction align-
+reasoning segmentation datasets, including RRSIS-D[33],              ment and faithfully reflecting the multimodal understanding
+RemoteSAM[71], and EarthReason[29]. While some im-                   challenges in geospatial imagery.
+ages from these datasets may overlap with previously anno-               GeoSeg-Bench is designed to evaluate a model’s capa-
+tated samples, each is treated as a distinct training instance       bility for fine-grained instruction grounding, spatial under-
+due to its unique textual instruction.                               standing, and cross-modal reasoning across three segmenta-
+                                                                     tion paradigms. We benchmark a series of multimodal seg-
+3.3. Dataset Statistics and Analysis                                 mentation models, including general-purpose models [25,
+                                                                     45, 80] and RS-oriented models [29, 40, 42, 48, 52, 71]. For
+The GeoSeg-1M comprises 590,413 unique RS images and                 fairness, several models are further fine-tuned on GeoSeg-
+1,148,504 image–mask–text triplets, establishing the first           1M to assess their adaptability.
+million-scale multimodal segmentation dataset in this field.             Results in Tab. 2 show that existing models perform
+It spans 117 object and land-cover categories after seman-           poorly without fine-tuning. While fine-tuning leads to sub-
+tic merging, with an upper limit imposed per categories to           stantial improvements, reasoning-task performance remains
+alleviate long-tail imbalance. The textual instructions are          relatively weak. These findings underscore the need for
+linguistically diverse, with varied length distributions. We         a unified, reasoning-aware framework for multimodal seg-
+report the average text length for each task to reflect the          mentation in RS. Further analysis can be found in Section 5.
+complexity of the instructions. Beyond textual diversity,
+GeoSeg-1M also covers varied spatial resolutions and scene           4. A Strong Baseline: UniGeoSeg
+scales, offering the widest spatial coverage among existing
+multimodal datasets. Tab. 1 compares these characteristics,          4.1. Overview
+underscoring the superiority of GeoSeg-1M in scale, lan-             To further advance multi-task instruction-driven multi-
+guage complexity, and spatial diversity for training unified         modal segmentation, we propose UniGeoSeg, a unified vi-
+
+
+                                                                 4
+sion–language segmentation model that performs reason-                the reasoning-enhanced embeddings:
+ing, referring, and interactive segmentation within a single                         h
+                                                                                   1X             q · E⊤ 
+framework. UniGeoSeg comprises three main components:                     Eres =         softmax
+                                                                                                    i
+                                                                                                     √ t Et + Et WG ,          (3)
+a hierarchical visual encoder that extracts multi-scale spatial                    h i=1               d
+features, an LLM that interprets textual instructions, and a
+pixel-level decoder that generates segmentation masks.                where h is the number of learnable queries and WG is
+   Based upon this core architecture, we introduce three              a learnable weight matrix for global aggregation. Finally,
+key mechanisms: task-adaptive text enhancement (TATE),                dropout and layer normalization are applied to enhance sta-
+latent knowledge memory (LKM), and progressive task                   bility when processing long text sequences:
+scheduling (PTS). These designs jointly enable UniGeoSeg                         Ẽres = LayerNorm(Dropout(Eres )).             (4)
+to unify diverse segmentation paradigms while maintaining
+contextual coherence in RS imagery. The overview of Uni-              This design enables the model to synthesize multi-faceted
+GeoSeg is shown as Fig. 2.                                            reasoning patterns with holistic instruction semantics, while
+                                                                      maintaining robustness and stability for long-range reason-
+4.2. Task-Adaptive Text Enhancement                                   ing in segmentation.
+To enable a unified text encoder to effectively handle hetero-           After obtaining the task-specific enhanced embeddings,
+geneous segmentation instructions, we introduce the TATE              the final embedding Ẽ sent into the language model is se-
+mechanism. The key insight is that instructions across dif-           lected based on the segmentation task.
+ferent segmentation paradigms entail distinct levels of se-                         
+mantic focus and alignment with visual content.                                     Ẽint , if interactive segmentation,
+                                                                                    
+                                                                               Ẽ = Ẽref , if referring segmentation,          (5)
+   For interactive segmentation, we explicitly encode user-                         
+                                                                                      Ẽres , if reasoning segmentation.
+                                                                                    
+provided spatial cues (e.g., click points or bounding boxes)
+into the textual embedding space of the LLM. Let Et de-               This ensures that the LLM receives the appropriately en-
+note the textual embeddings obtained from the embedding               hanced embeddings corresponding to the specific task, en-
+layer after tokenization, and Ct the set of spatial coordi-           abling effective task-adaptive guidance for segmentation.
+nates provided by the user. When multiple coordinates                    By designing separate enhancement pathways for differ-
+are provided, they are first concatenated and then projected          ent task paradigms, TATE provides a flexible and modu-
+into the same dimensional space as Et via a linear layer.             lar framework. Each pathway is lightweight yet effective,
+A subsequent linear fusion layer adaptively integrates the            allowing the model to handle heterogeneous instructions
+coordinate-aware features with the text embeddings:                   without introducing significant computational overhead.
+              Ẽint = Fusion (Et , Proj(Ct )) .            (1)        4.3. Latent Knowledge Memory
+This enhancement explicitly injects and further emphasizes            Although multi-task training allows the model to handle di-
+the coordinate-aware spatial cues into the text embedding             verse instruction-driven segmentation tasks, each task often
+space, enabling segmentation to be effectively conditioned            learns isolated representations, leading to limited semantic
+on user-provided guidance.                                            transfer across task boundaries. To encourage cross-task
+   For referring segmentation, we enhance token embed-                knowledge sharing, we introduce the LKM module con-
+dings through an attention mechanism using a single learn-            sisting of N learnable memory slots {Mn }N    n=1 storing la-
+able query vector q:                                                  tent, task-agnostic representations distilled from previous
+                               q · E⊤                               instruction–mask pairs.
+               Ẽref = softmax √ t Et .                    (2)            Let H ∈ RL×d denote the sequence of L embeddings
+                                    d                                 produced by LLM, where d is the hidden state dimension.
+This query computes similarity with each token embedding              We compute attention-based similarity between H and each
+in Et , producing attention weights that selectively empha-           memory slot to retrieve latent knowledge as follows:
+size keywords and object-relevant cues.                                                  N
+                                                                                         X
+                                                                                               softmax H M⊤
+                                                                                                            
+   For reasoning segmentation, the model needs to cap-                              Z=                    n Mn ,               (6)
+ture diverse semantic relations and contextual dependen-                                 n=1
+cies, such as spatial relations, attribute constraints, and
+                                                                      where Z ∈ RL×d is the aggregated latent knowledge.
+causal reasoning cues [29]. To achieve this, we first apply
+                                                                         To avoid excessive reliance on latent priors, we fuse the
+multi-query attention over the token embeddings Et , where
+                                                                      retrieved knowledge with the original embeddings through
+each query learns to attend to a specific reasoning dimen-
+                                                                      a weighting scheme:
+sion. In parallel, a linear layer aggregates global informa-
+tion. The outputs from these two streams are fused to obtain                             H̃ = (1 − λ) H + λ Z,                  (7)
+
+
+                                                                  5
+where λ is a hyperparameter that controls the influence of           Table 2. Results on the GeoSeg-Bench. The best results are shown
+memory. The fused representation H̃ is then passed to the            in blod, second-best results are underlined.
+mask decoder along with multi-scale visual features to gen-
+                                                                                         Interactive        Referring       Reasoning
+erate the output mask.                                               Method
+                                                                                        cIoU      gIoU    cIoU    gIoU     cIoU    gIoU
+4.4. Progressive Task Scheduling                                     LISA [25]           2.52      3.12    3.53    4.56     7.09    5.77
+                                                                     PixelLM [45]        0.08      0.11    6.04    5.80     6.36    6.30
+In multi-task segmentation, the three tasks exhibit differ-          PSALM [80]          6.35     10.83   31.77   18.91    11.88    9.27
+ent levels of difficulty and data volume. Interactive seg-           Geopixel [48]      17.21     18.71   37.34   40.14    27.36   26.71
+                                                                     Geopix [40]        15.28     17.63   28.81   28.52    20.80   18.25
+mentation is relatively easy and abundant, requiring mainly
+                                                                     RemoteSAM [71]      4.85      6.49   12.06   29.31     8.09    9.01
+spatial understanding; referring segmentation is moderately          Earthmind [52]     16.38     16.57   44.53   46.48    31.01   28.80
+challenging, demanding contextual reasoning and object lo-           LISAT [42]          4.27      5.52   37.87   40.14    22.06   20.09
+calization; reasoning segmentation is the most difficult, in-        Segearth-R1 [29]    4.88      5.28   14.65    9.39    12.72   11.97
+volving long text, global context integration, and external           Finetuned on GeoSeg-1M
+knowledge, while high-quality samples are scarce.                    PSALM              70.78     74.10   68.70   71.15    47.53   49.59
+   To balance these differences, we adopt the PTS strat-             Geopixel           42.62     46.48   42.70   45.50    30.25   28.51
+egy. During training, the proportion of interactive sam-             Earthmind          67.74     70.89   48.09   49.24    36.84   25.71
+                                                                     LISAT              68.43     73.00   59.82   62.46    41.53   31.25
+ples is gradually reduced, referring samples are kept stable,        Segearth-R1        72.09     75.00   70.76   72.98    53.31   51.56
+and reasoning samples are progressively increased dynam-             UniGeoSeg (ours)   74.44     76.37   72.60   74.25    58.20   52.96
+ically. Early emphasis on interactive tasks helps the model
+acquire basic spatial reasoning, while later reduction pre-
+vents overfitting and encourages focus on harder reasoning           mulated as:
+tasks, improving open-world generalization. Similar to cur-                                         N
+                                                                                                1 X |Mipred ∩ Migt |
+riculum learning [4], the PTS effectively balances differ-                          gIoU =                             ,                (8)
+                                                                                                N i=1 |Mipred ∪ Migt |
+ences in task difficulty and data volume, enabling a smooth
+transition from easy to difficult tasks.
+                                                                     where Mipred and Migt denote the predicted and ground-truth
+                                                                     masks for sample i. The cIoU is computed over all pixels
+5. Experiments                                                       across the samples:
+5.1. Experimental Setup                                                                          |M pred ∩ Migt |
+                                                                                             P
+                                                                                    cIoU = Pi ipred               .          (9)
+Datasets and tasks. We train our baseline model on                                             i |Mi     ∪ Migt |
+the GeoSeg-1M dataset. The model is then evaluated on                For visual grounding experiments, we compute the gIoU
+GeoSeg-Bench as well as the validation and test sets of              and cIoU of the predicted bounding boxes with respect to
+RRSIS-D and EarthReason, demonstrating its ability to                the ground-truth boxes.
+handle diverse tasks in a single framework. To evaluate              Implementation details. Our model adopts Phi-1.5 [31] as
+zero-shot generalization, we further train our model from            the language backbone, Swin-B [34] as the visual encoder,
+scratch on a DIOR-excluded subset of GeoSeg-1M. The re-              and Mask2Former [11] as the segmentation decoder. The
+sulting model is tested on 4,000 samples from SIOR [60]              model is trained with bfloat16 precision. The visual encoder
+for interactive segmentation, with half of the samples using         and decoder are initialized from pretrained Mask2Former
+point prompts and half using box prompts. Additionally,              weights. All input images are resized to 512 × 512 for train-
+we assess zero-shot visual localization on the DIOR-RSVG             ing and evaluation. We employ the AdamW [35] optimizer
+[75] test set, where the target regions are represented by the       with an initial learning rate of 1 × 10−4 and a cosine decay
+tightest enclosing rectangles of the masks.                          schedule. The visual encoder is frozen during training. The
+Evaluation metrics. Following standard referring segmen-             batch size is set to 16, and each experiment is trained for
+tation benchmarks (e.g., RefCOCO [73]), we report both               3 epochs. We apply the proposed PTS strategy where the
+global IoU (gIoU) and cumulative IoU (cIoU) for segmen-              sampling weight of interactive segmentation gradually de-
+tation evaluation, and adopt gIoU as the primary metric,             creases to 0.7, with the remaining weight allocated to rea-
+as it equally weights each sample and better captures per-           soning samples. All experiments are conducted on eight
+instance performance on multi-scale and irregular targets            NVIDIA A800 GPUs.
+typical in RS. The cIoU, computed over all pixels, is re-
+ported as a complementary area-weighted metric to reflect            5.2. Main Results
+overall segmentation quality.                                        Results on GeoSeg-Bench. We first evaluate a wide
+    The gIoU measures per-sample mask accuracy and is for-           range of models, including general-purpose LMMs and RS-
+
+
+                                                                 6
+      Figure 3. Qualitative examples of the segmentations generated by UniGeoSeg and comparative methods on GeoSeg-Bench.
+
+
+specific methods, on the interactive, referring, and reason-         Table 3. Results on EarthReason and RRSIS-D. The best results
+ing tasks of GeoSeg-Bench. As shown in Tab. 2, our model             are shown in blod, second-best results are underlined.
+achieves state-of-the-art performance on all three tasks, out-
+                                                                                           EarthReason (Val)   EarthReason (Test)    RRSIS-D
+performing existing general and RS large multimodal mod-             Method
+                                                                                           cIoU      gIoU      cIoU      gIoU       cIoU    gIoU
+els. Notably, other models perform poorly when directly
+                                                                     LISA [25]             57.39    59.10      61.04     60.88      27.84   26.78
+tested on GeoSeg-Bench without training, indicating their            PixelLM [45]          57.79    59.22      57.94     60.01      33.89   31.65
+limited capability in understanding context and performing           PSALM [80]            62.03    64.61      66.61     68.30        -       -
+                                                                     NExT-Chat [76]          -        -          -         -        26.98   24.98
+complex reasoning in geospatial scenes. We further fine-             Geoground [81]          -        -          -         -        61.10   60.50
+tune some well-performing models on our dataset. While               RemoteSAM [71]          -        -          -         -        80.04   71.75
+fine-tuning significantly improves their results, they still         Geopixel [48]         54.23    52.13      53.90     52.53      83.33   67.30
+                                                                     Segearth-R1 [29]      64.13    68.25      68.60     70.75      67.56   66.40
+lag behind our model, demonstrating the superiority of our           RemoteReasoner [72]   67.80    69.13      69.02     70.96      54.29   50.97
+model in capturing spatial grounding, multimodal context,            UniGeoSeg (ours)      73.39    72.65      75.67     73.12      81.35   72.23
+and reasoning. Some examples of the segmentations gener-
+ated by UniGeoSeg and comparative methods on GeoSeg-
+Bench are shown in Fig. 3.                                           results on interactive segmentation and visual grounding
+                                                                     tasks, as shown in Tab. 4 and Tab. 5, respectively. The
+Results on EarthReason and RRSIS-D. We further eval-                 model achieves competitive performance in both settings,
+uate a variety of methods, including our model, on Earth-            demonstrating strong spatial modeling and consistently ro-
+Reason and RRSIS-D, corresponding to reasoning and re-               bust generalization across RS imagery.
+ferring segmentation, respectively. As shown in Tab. 3, our
+model maintains superior performance across both tasks. It           5.3. Ablations
+achieves absolute gains of 6.65 and 2.16 percentage points
+                                                                     All ablation experiments are conducted on a representative
+in cIoU and gIoU on EarthReason test set over the previous
+                                                                     subset of GeoSeg-1M with DIOR-derived data excluded.
+best. The consistent performance across EarthReason and
+                                                                     We report the performance in terms of gIoU on the referring
+RRSIS-D highlights the general applicability of UniGeoSeg
+                                                                     and reasoning tasks of GepSeg-Bench, as well as on interac-
+to RS referring and reasoning segmentation.
+                                                                     tive segmentation task of SIOR, to systematically quantify
+Zero-shot results. We subsequently report the zero-shot              the effect of each component.
+
+
+                                                                 7
+Table 4. Results of zero-shot interactive segmentation on SIOR.                    Table 8. Ablation on the memory slot size (N ) and fusion weight
+The best results are blod, second-best results are underlined.                     (λ) of the LKM module. Performance is reported as gIoU on Re-
+                                                                                   ferring / Reasoning tasks. The best results are shown in blod.
+                            Box                Point              Average
+Method
+                       cIoU     gIoU       cIoU      gIoU    cIoU      gIoU                                   N =4              N =8
+SAM2 [44]              91.23    92.27      71.47     76.45   80.34     84.36                  λ = 0.0      64.70 / 35.64    64.70 / 35.64
+HQ-SAM [22]            91.91    90.81      69.25     74.63   79.12     83.27                  λ = 0.1      65.79 / 36.23    65.14 / 35.81
+RemoteSAM [71]         12.02    21.89      12.32     20.45   12.18     21.17                  λ = 0.2      66.37 / 37.06    66.17 / 36.95
+PSALM [80]             48.09    57.36      40.60     51.08   44.01     51.95                  λ = 0.3      65.73 / 35.47    66.06 / 36.72
+UniGeoSeg (ours)       90.60    90.94      84.61     86.60   87.42     88.77
+
+                                                                                          Table 9. Ablation of different sampling strategies.
+Table 5. Results of zero-shot vision grounding on RSVG-DIOR
+test set, best results are in blod, second-best results are underlined.
+                                                                                   Strategy              Interactive       Referring        Reasoning
+Method                   cIoU     gIoU      PR@0.3      PR@0.5       PR@0.7        Average sampling         88.76           73.14           51.11
+                                                                                   PTS                  88.77 (+0.01)   73.21 (+0.07)   51.42 (+0.31)
+OV-VG [59]              18.34     22.07      27.78        19.16       12.93
+GroundVLP [49]          17.51     17.14      21.66        16.83       12.27
+DiffSegmenter [63]      26.92     28.47      39.80        24.29       13.01
+DiffPNG [69]            25.65     26.93      37.92        23.18       11.35        branches results in lower gIoU on the three tasks, highlight-
+LISA [25]                 -       27.78        -          25.80         -
+GeoChat [24]              -       32.53        -          27.61         -
+                                                                                   ing the effectiveness of assigning lightweight, task-specific
+Qwen2.5-VL [64]           -       31.93        -          30.35         -          enhancements within TATE to better capture the distinct
+RSVG-ZeroOV [28]        31.28     34.49      45.71        31.39       16.74        textual reasoning requirements of each task.
+UniGeoSeg (ours)        70.82     59.67      74.94        67.84       55.11        Hyperparameters in LKM. We also perform an ablation
+                                                                                   study on the LKM module, which involves two key hyper-
+Table 6. Ablation study of TATE and LKM modules. ✓indicates                        parameters: the number of memory slots (N ) and the fu-
+the module is enabled.                                                             sion weight factor (λ). By systematically varying these pa-
+                                                                                   rameters and evaluating the model on our benchmark and
+TATE      LKM          Interactive         Referring          Reasoning            the DIOR-based interactive segmentation task, we find that
+                       82.51                  64.62              32.88             N = 4 and λ = 0.2 yield the best performance, as shown in
+  ✓                84.61 (+2.10)          64.70 (+0.08)      35.64 (+2.76)         Tab. 8, providing a practical setting for balancing memory
+            ✓      81.97 (-0.54)          65.21 (+0.59)      33.85 (+0.97)         capacity and integration strength.
+  ✓         ✓      84.84 (+2.33)          66.37 (+1.75)      37.06 (+4.18)         PTS strategy. Finally, we conduct an ablation study on the
+                                                                                   PTS training strategy using the subset of the GeoSeg-1M
+         Table 7. Ablation study of the branches in TATE.                          with all DIOR-derived data excluded. Compared to uni-
+                                                                                   form sampling, PTS strategy improves performance on both
+                           Interactive        Referring           Reasoning        the referring expression and reasoning segmentation tasks
+w/o TATE                     81.97              65.21             33.85            without compromising interactive segmentation, as shown
+All referring branch     81.29 (-0.68)      65.44 (+0.23)     33.88 (+0.03)        in Tab. 9. These results validate the effectiveness of the
+All reasoning branch     83.16 (+1.19)      65.73 (+0.52)     36.01 (+2.16)        PTS strategy in balancing multiple tasks during training.
+TATE                     84.84 (+2.87)      66.37 (+1.16)     37.06 (+3.21)
+
+                                                                                   6. Conclusion
+TATE and LKM. We first perform ablation studies on                                 We present GeoSeg-1M, the first million-scale multimodal
+the TATE and LKM modules. By removing these mod-                                   segmentation dataset for RS, together with GeoSeg-Bench,
+ules individually, we examine their contributions to the                           a comprehensive benchmark designed to evaluate spatial
+overall model performance. As shown in Tab. 6, the re-                             reasoning, contextual understanding, and multi-task perfor-
+moval of either module leads to a noticeable drop in perfor-                       mance in complex geospatial scenes. Building upon these
+mance across tasks, confirming the effectiveness of TATE                           resources, we introduce UniGeoSeg, a unified baseline for
+for multi-task text disentanglement and spatial reasoning,                         instruction-driven multimodal segmentation that integrates
+                                                                                   multi-task alignment and long-text reasoning within a
+and of LKM for cross-task knowledge sharing.
+                                                                                   single framework. Extensive experiments demonstrate
+Branches in TATE. We further conduct an internal ablation                          that UniGeoSeg achieves state-of-the-art performance on
+study of the TATE module. Specifically, we report the per-                         both GeoSeg-Bench and multiple public datasets, while
+formance when three tasks use the same referring branch or                         exhibiting strong zero-shot generalization on interactive
+reasoning branch without task-specific customization. As                           segmentation and visual grounding tasks. Overall, our
+reported in Tab. 7, applying the same mechanism across all                         unified approach advances reasoning-driven multimodal
+
+
+                                                                               8
+understanding in RS and establishes a scalable foundation                     ings of the IEEE/CVF conference on computer vision and
+for future research in open-world geospatial intelligence.                    pattern recognition, pages 1290–1299, 2022. 6
+                                                                         [12] Wei-Lin Chiang, Zhuohan Li, Ziqing Lin, Ying Sheng,
+                                                                              Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang,
+References                                                                    Yonghao Zhuang, Joseph E Gonzalez, et al. Vicuna: An
+                                                                              open-source chatbot impressing gpt-4 with 90%* chatgpt
+ [1] Kyeongjin Ahn, Sungwon Han, Sungwon Park, Jihee Kim,                     quality. See https://vicuna. lmsys. org (accessed 14 April
+     Sangyoon Park, and Meeyoung Cha. Generalizable disaster                  2023), 2(3):6, 2023. 10
+     damage assessment via change detection with vision foun-            [13] Gordon Christie, Neil Fendley, James Wilson, and Ryan
+     dation model. In Proceedings of the AAAI Conference on                   Mukherjee. Functional map of the world. In Proceedings
+     Artificial Intelligence, pages 27784–27792, 2025. 1                      of the IEEE Conference on Computer Vision and Pattern
+ [2] Seyed Majid Azimi, Corentin Henry, Lars Sommer, Arne                     Recognition, pages 6172–6180, 2018. 3
+     Schumann, and Eleonora Vig. Skyscapes fine-grained se-              [14] Ilke Demir, Krzysztof Koperski, David Lindenbaum, Guan
+     mantic understanding of aerial scenes. In Proceedings of                 Pang, Jing Huang, Saikat Basu, Forest Hughes, Devis Tuia,
+     the IEEE/CVF International Conference on Computer Vi-                    and Ramesh Raskar. Deepglobe 2018: A challenge to parse
+     sion, pages 7393–7403, 2019. 3                                           the earth through satellite images. In Proceedings of the
+ [3] Mohammad R Bayanlou and Mehdi Khoshboresh-                               IEEE conference on computer vision and pattern recognition
+     Masouleh. Multi-task learning from fixed-wing uav images                 workshops, pages 172–181, 2018. 3, 1, 8
+     for 2d/3d city modeling. arXiv preprint arXiv:2109.00918,           [15] Zhe Dong, Yuzhe Sun, Tianzhu Liu, Wangmeng Zuo, and
+     2021. 3, 1, 8                                                            Yanfeng Gu. Cross-modal bidirectional interaction model for
+ [4] Yoshua Bengio, Jérôme Louradour, Ronan Collobert, and Ja-              referring remote sensing image segmentation. arXiv preprint
+     son Weston. Curriculum learning. In Proceedings of the 26th              arXiv:2410.08613, 2024. 3
+     annual international conference on machine learning, pages          [16] Dawei Du, Pengfei Zhu, Longyin Wen, Xiao Bian, Haibin
+     41–48, 2009. 6                                                           Lin, Qinghua Hu, Tao Peng, Jiayu Zheng, Xinyao Wang, Yue
+ [5] Hanbo Bi, Yingchao Feng, Yongqiang Mao, Jianning Pei,                    Zhang, et al. Visdrone-det2019: The vision meets drone ob-
+     Wenhui Diao, Hongqi Wang, and Xian Sun. Agmtr: Agent                     ject detection in image challenge results. In Proceedings of
+     mining transformer for few-shot segmentation in remote                   the IEEE/CVF international conference on computer vision
+     sensing. International Journal of Computer Vision, 133(4):               workshops, pages 0–0, 2019. 3
+     1780–1807, 2025. 1                                                  [17] Tianyi Gao, Wei Ao, Xing-ao Wang, Yuanhao Zhao, Ping
+                                                                              Ma, Mengjie Xie, Hang Fu, Jinchang Ren, and Zhi Gao.
+ [6] Xiao Bi, Deli Chen, Guanting Chen, Shanhuang Chen,
+                                                                              Enrich distill and fuse: Generalized few-shot semantic seg-
+     Damai Dai, Chengqi Deng, Honghui Ding, Kai Dong,
+                                                                              mentation in remote sensing leveraging foundation model’s
+     Qiushi Du, Zhe Fu, et al. Deepseek llm: Scaling open-
+                                                                              assistance. In Proceedings of the IEEE/CVF Conference
+     source language models with longtermism. arXiv preprint
+                                                                              on Computer Vision and Pattern Recognition, pages 2771–
+     arXiv:2401.02954, 2024. 10
+                                                                              2780, 2024. 1
+ [7] Zheng Cai, Maosong Cao, Haojiong Chen, Kai Chen, Keyu               [18] Anatol Garioud, Nicolas Gonthier, Loic Landrieu, Apolline
+     Chen, Xin Chen, Xun Chen, Zehui Chen, Zhi Chen, Pei                      De Wit, Marion Valette, Marc Poupée, Sébastien Giordano,
+     Chu, et al. Internlm2 technical report. arXiv preprint                   et al. Flair: a country-scale land cover semantic segmen-
+     arXiv:2403.17297, 2024. 10                                               tation dataset from multi-source optical imagery. Advances
+ [8] Javiera Castillo-Navarro, Bertrand Le Saux, Alexandre                    in Neural Information Processing Systems, 36:16456–16482,
+     Boulch, Nicolas Audebert, and Sébastien Lefèvre. Semi-                 2023. 3, 1, 8
+     supervised semantic segmentation in earth observation: The          [19] Ronghang Hu, Marcus Rohrbach, and Trevor Darrell. Seg-
+     minifrance suite, dataset analysis and multi-task network                mentation from natural language expressions. In European
+     study. Machine Learning, 111(9):3125–3160, 2022. 3, 1,                   conference on computer vision, pages 108–124. Springer,
+     8                                                                        2016. 2
+ [9] Keyan Chen, Jiafan Zhang, Chenyang Liu, Zhengxia Zou,               [20] Yuan Hu, Jianlong Yuan, Congcong Wen, Xiaonan Lu, Yu
+     and Zhenwei Shi. Rsrefseg: Referring remote sensing im-                  Liu, and Xiang Li. Rsgpt: A remote sensing vision language
+     age segmentation with foundation models. arXiv preprint                  model and benchmark. ISPRS Journal of Photogrammetry
+     arXiv:2501.06809, 2025. 1                                                and Remote Sensing, 224:272–286, 2025. 2
+[10] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen,             [21] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perel-
+     Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu,                       man, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Weli-
+     Lewei Lu, et al. Internvl: Scaling up vision foundation mod-             hinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card.
+     els and aligning for generic visual-linguistic tasks. In Pro-            arXiv preprint arXiv:2410.21276, 2024. 3
+     ceedings of the IEEE/CVF conference on computer vision              [22] Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing
+     and pattern recognition, pages 24185–24198, 2024. 10                     Tai, Chi-Keung Tang, and Fisher Yu. Segment anything in
+[11] Bowen Cheng, Ishan Misra, Alexander G Schwing, Alexan-                   high quality. In NeurIPS, 2023. 8
+     der Kirillov, and Rohit Girdhar. Masked-attention mask              [23] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+     transformer for universal image segmentation. In Proceed-                Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+
+
+                                                                     9
+     head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-              [35] Ilya Loshchilov and Frank Hutter. Decoupled weight decay
+     thing. In Proceedings of the IEEE/CVF international confer-               regularization. arXiv preprint arXiv:1711.05101, 2017. 6
+     ence on computer vision, pages 4015–4026, 2023. 1, 2                 [36] Xiaoqiang Lu, Long Sun, Lingling Li, Licheng Jiao, Yuting
+[24] Kartik Kuckreja, Muhammad Sohail Danish, Muzammal                         Yang, Zhongjian Huang, Jinming Chai, Xu Liu, Fang Liu,
+     Naseer, Abhijit Das, Salman Khan, and Fahad Shahbaz                       Wenping Ma, et al. Rrsecs: Referring remote sensing expres-
+     Khan. Geochat: Grounded large vision-language model for                   sion comprehension and segmentation. IEEE Geoscience
+     remote sensing. In Proceedings of the IEEE/CVF Conference                 and Remote Sensing Magazine, 2025. 1, 2
+     on Computer Vision and Pattern Recognition, pages 27831–             [37] Junwei Luo, Zhen Pang, Yongjun Zhang, Tingzhu Wang,
+     27840, 2024. 2, 8                                                         Linlin Wang, Bo Dang, Jiangwei Lao, Jian Wang, Jingdong
+[25] Xin Lai, Zhuotao Tian, Yukang Chen, Yanwei Li, Yuhui                      Chen, Yihua Tan, et al. Skysensegpt: A fine-grained in-
+     Yuan, Shu Liu, and Jiaya Jia. Lisa: Reasoning segmentation                struction tuning dataset and model for remote sensing vision-
+     via large language model. In Proceedings of the IEEE/CVF                  language understanding. arXiv preprint arXiv:2406.10100,
+     Conference on Computer Vision and Pattern Recognition,                    2024. 2
+     pages 9579–9589, 2024. 2, 4, 6, 7, 8, 10                             [38] Dilxat Muhtar, Zhenshi Li, Feng Gu, Xueliang Zhang, and
+[26] Ke Li, Gang Wan, Gong Cheng, Liqiu Meng, and Junwei                       Pengfeng Xiao. Lhrs-bot: Empowering remote sensing
+     Han. Object detection in optical remote sensing images: A                 with vgi-enhanced large multimodal language model. In
+     survey and a new benchmark. ISPRS journal of photogram-                   European Conference on Computer Vision, pages 440–457.
+     metry and remote sensing, 159:296–307, 2020. 3, 2, 8                      Springer, 2024. 2
+[27] Kaiyu Li, Ruixun Liu, Xiangyong Cao, Xueru Bai, Feng                 [39] Sayan Nag, Koustava Goswami, and Srikrishna Karanam.
+     Zhou, Deyu Meng, and Zhi Wang. Segearth-ov: Towards                       Safari: Adaptive s equence tr a ns f ormer for we a kly su-
+     training-free open-vocabulary segmentation for remote sens-               pervised r eferring expression segmentat i on. In European
+     ing images. In Proceedings of the Computer Vision and Pat-                Conference on Computer Vision, pages 485–503. Springer,
+     tern Recognition Conference, pages 10545–10556, 2025. 2                   2024. 2
+[28] Ke Li, Di Wang, Ting Wang, Fuyu Dong, Yiming Zhang,                  [40] Ruizhe Ou, Yuan Hu, Fan Zhang, Jiaxin Chen, and Yu Liu.
+     Luyao Zhang, Xiangyu Wang, Shaofeng Li, and Quan Wang.                    Geopix: A multimodal large language model for pixel-level
+     Rsvg-zeroov: Exploring a training-free framework for zero-                image understanding in remote sensing. IEEE Geoscience
+     shot open-vocabulary visual grounding in remote sensing im-               and Remote Sensing Magazine, 2025. 2, 4, 6, 10
+     ages. arXiv preprint arXiv:2509.18711, 2025. 8                       [41] Jiancheng Pan, Yanxing Liu, Yuqian Fu, Muyuan Ma, Jiahao
+[29] Kaiyu Li, Zepeng Xin, Li Pang, Chao Pang, Yupeng Deng,                    Li, Danda Pani Paudel, Luc Van Gool, and Xiaomeng Huang.
+     Jing Yao, Guisong Xia, Deyu Meng, Zhi Wang, and Xiangy-                   Locate anything on earth: Advancing open-vocabulary ob-
+     ong Cao. Segearth-r1: Geospatial pixel reasoning via large                ject detection for remote sensing community. In Proceed-
+     language model. arXiv preprint arXiv:2504.09644, 2025. 1,                 ings of the AAAI Conference on Artificial Intelligence, pages
+     2, 3, 4, 5, 6, 7, 8, 10, 11                                               6281–6289, 2025. 2
+[30] Ruiyu Li, Kaican Li, Yi-Chun Kuo, Michelle Shu, Xiaojuan             [42] Jerome Quenum, Wen-Han Hsieh, Tsung-Han Wu, Ritwik
+     Qi, Xiaoyong Shen, and Jiaya Jia. Referring image seg-                    Gupta, Trevor Darrell, and David M Chan. Lisat: Language-
+     mentation via recurrent refinement networks. In Proceed-                  instructed segmentation assistant for satellite imagery. arXiv
+     ings of the IEEE Conference on Computer Vision and Pattern                preprint arXiv:2505.02829, 2025. 4, 6, 10
+     Recognition, pages 5745–5753, 2018. 2                                [43] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+[31] Yuanzhi Li, Sébastien Bubeck, Ronen Eldan, Allie                         Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+     Del Giorno, Suriya Gunasekar, and Yin Tat Lee. Textbooks                  Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+     are all you need ii: phi-1.5 technical report. arXiv preprint             transferable visual models from natural language supervi-
+     arXiv:2309.05463, 2023. 6, 10                                             sion. In International conference on machine learning, pages
+[32] Fan Liu, Delong Chen, Zhangqingyun Guan, Xiaocong                         8748–8763. PmLR, 2021. 2, 10
+     Zhou, Jiale Zhu, Qiaolin Ye, Liyong Fu, and Jun Zhou. Re-            [44] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang
+     moteclip: A vision language foundation model for remote                   Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman
+     sensing. IEEE Transactions on Geoscience and Remote                       Rädle, Chloe Rolland, Laura Gustafson, et al. Sam 2: Seg-
+     Sensing, 62:1–16, 2024. 10                                                ment anything in images and videos. In The Thirteenth In-
+[33] Sihan Liu, Yiwei Ma, Xiaoqing Zhang, Haowei Wang, Ji-                     ternational Conference on Learning Representations, 2024.
+     ayi Ji, Xiaoshuai Sun, and Rongrong Ji. Rotated multi-scale               8
+     interaction network for referring remote sensing image seg-          [45] Zhongwei Ren, Zhicheng Huang, Yunchao Wei, Yao Zhao,
+     mentation. In Proceedings of the IEEE/CVF Conference                      Dongmei Fu, Jiashi Feng, and Xiaojie Jin. Pixellm: Pixel
+     on Computer Vision and Pattern Recognition, pages 26658–                  reasoning with large multimodal model. In Proceedings of
+     26668, 2024. 1, 2, 3, 4, 8, 10, 11                                        the IEEE/CVF Conference on Computer Vision and Pattern
+[34] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng                    Recognition, pages 26374–26383, 2024. 4, 6, 7, 10
+     Zhang, Stephen Lin, and Baining Guo. Swin transformer:               [46] Caleb Robinson, Le Hou, Kolya Malkin, Rachel Soobit-
+     Hierarchical vision transformer using shifted windows. In                 sky, Jacob Czawlytko, Bistra Dilkina, and Nebojsa Jojic.
+     Proceedings of the IEEE/CVF international conference on                   Large scale high-resolution land cover mapping with multi-
+     computer vision, pages 10012–10022, 2021. 6, 9, 10                        resolution data. In Proceedings of the IEEE/CVF Conference
+
+
+                                                                     10
+     on Computer Vision and Pattern Recognition, pages 12726–                 Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al.
+     12735, 2019. 3, 1, 8                                                     Llama 2: Open foundation and fine-tuned chat models. arXiv
+[47] Antonis Savva, Christos Kyrkou, Panayiotis Kolios, and                   preprint arXiv:2307.09288, 2023. 10
+     Theocharis Theocharides. Advances in remote sensing and             [59] Chunlei Wang, Wenquan Feng, Xiangtai Li, Guangliang
+     ai for vegetation monitoring in power line corridors: A re-              Cheng, Shuchang Lyu, Binghao Liu, Lijiang Chen, and Qi
+     view and future directions: A review and future directions.              Zhao. Ov-vg: A benchmark for open-vocabulary visual
+     IEEE Geoscience and Remote Sensing Magazine, 2025. 1                     grounding. Neurocomputing, 591:127738, 2024. 8
+[48] Akashah Shabbir, Mohammed Zumri, Mohammed Ben-                      [60] Di Wang, Jing Zhang, Bo Du, Minqiang Xu, Lin Liu,
+     namoun, Fahad Shahbaz Khan, and Salman Khan. Geopixel:                   Dacheng Tao, and Liangpei Zhang. Samrs: Scaling-up re-
+     Pixel grounding large multimodal model in remote sens-                   mote sensing segmentation dataset with segment anything
+     ing. In Forty-second International Conference on Machine                 model. Advances in Neural Information Processing Systems,
+     Learning, 2025. 2, 4, 6, 7, 10                                           36:8815–8827, 2023. 1, 6, 2, 8
+[49] Haozhan Shen, Tiancheng Zhao, Mingwei Zhu, and Jian-                [61] Fengxiang Wang, Hongzhen Wang, Zonghao Guo, Di Wang,
+     wei Yin. Groundvlp: Harnessing zero-shot visual ground-                  Yulin Wang, Mingshuo Chen, Qiang Ma, Long Lan, Wenjing
+     ing from vision-language pre-training and open-vocabulary                Yang, Jing Zhang, et al. Xlrs-bench: Could your multimodal
+     object detection. In Proceedings of the AAAI Conference on               llms understand extremely large ultra-high-resolution remote
+     Artificial Intelligence, pages 4766–4775, 2024. 8                        sensing imagery? In Proceedings of the Computer Vision
+[50] Hengcan Shi, Hongliang Li, Fanman Meng, and Qingbo Wu.                   and Pattern Recognition Conference, pages 14325–14336,
+     Key-word-aware network for referring expression image seg-               2025. 1
+     mentation. In Proceedings of the European Conference on             [62] Junjue Wang, Zhuo Zheng, Ailong Ma, Xiaoyan Lu, and
+     Computer Vision (ECCV), pages 38–54, 2018. 2                             Yanfei Zhong. Loveda: A remote sensing land-cover dataset
+[51] Qian Shi, Da He, Zhengyu Liu, Xiaoping Liu, and Jingqian                 for domain adaptive semantic segmentation. arXiv preprint
+     Xue. Globe230k: A benchmark dense-pixel annotation                       arXiv:2110.08733, 2021. 3, 1, 8
+     dataset for global land cover mapping. Journal of Remote
+                                                                         [63] Jinglong Wang, Xiawei Li, Jing Zhang, Qingyuan Xu, Qin
+     Sensing, 3:0078, 2023. 3, 1, 8
+                                                                              Zhou, Qian Yu, Lu Sheng, and Dong Xu. Diffusion model is
+[52] Yan Shu, Bin Ren, Zhitong Xiong, Danda Pani Paudel, Luc
+                                                                              secretly a training-free open vocabulary semantic segmenter.
+     Van Gool, Begum Demir, Nicu Sebe, and Paolo Rota. Earth-
+                                                                              IEEE Transactions on Image Processing, 2025. 8
+     mind: Towards multi-granular and multi-sensor earth ob-
+                                                                         [64] Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan,
+     servation with large multimodal models. arXiv preprint
+                                                                              Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin
+     arXiv:2506.01667, 2025. 4, 6, 10
+                                                                              Ge, et al. Qwen2-vl: Enhancing vision-language model’s
+[53] Sagar Soni, Akshay Dudhane, Hiyam Debary, Mustansar
+                                                                              perception of the world at any resolution. arXiv preprint
+     Fiaz, Muhammad Akhtar Munir, Muhammad Sohail Danish,
+                                                                              arXiv:2409.12191, 2024. 3, 8
+     Paolo Fraccaro, Campbell D Watson, Levente J Klein, Fa-
+     had Shahbaz Khan, et al. Earthdial: Turning multi-sensory           [65] Yu Wang, Bo Dang, Wanchun Li, Wei Chen, and Yansheng
+     earth observations to interactive dialogues. In Proceedings              Li. Holitracer: Holistic vectorization of geographic objects
+     of the Computer Vision and Pattern Recognition Conference,               from large-size remote sensing imagery. In Proceedings of
+     pages 14303–14313, 2025. 2                                               the IEEE/CVF International Conference on Computer Vi-
+[54] Xian Sun, Peijin Wang, Zhiyuan Yan, Feng Xu, Ruiping                     sion, pages 8482–8491, 2025. 1
+     Wang, Wenhui Diao, Jin Chen, Jihao Li, Yingchao Feng,               [66] Jianzong Wu, Xiangtai Li, Xia Li, Henghui Ding, Yunhai
+     Tao Xu, et al. Fair1m: A benchmark dataset for fine-                     Tong, and Dacheng Tao. Toward robust referring image seg-
+     grained object recognition in high-resolution remote sens-               mentation. IEEE Transactions on Image Processing, 33:
+     ing imagery. ISPRS Journal of Photogrammetry and Remote                  1782–1794, 2024. 2
+     Sensing, 184:116–130, 2022. 3, 2, 8                                 [67] Gui-Song Xia, Jingwen Hu, Fan Hu, Baoguang Shi, Xiang
+[55] Yuxi Sun, Shanshan Feng, Xutao Li, Yunming Ye, Jian                      Bai, Yanfei Zhong, Liangpei Zhang, and Xiaoqiang Lu. Aid:
+     Kang, and Xu Huang. Visual grounding in remote sensing                   A benchmark data set for performance evaluation of aerial
+     images. In Proceedings of the 30th ACM International con-                scene classification. IEEE Transactions on Geoscience and
+     ference on Multimedia, pages 404–412, 2022. 3                            Remote Sensing, 55(7):3965–3981, 2017. 3
+[56] Xin-Yi Tong, Gui-Song Xia, Qikai Lu, Huangfeng Shen,                [68] Gui-Song Xia, Xiang Bai, Jian Ding, Zhen Zhu, Serge Be-
+     Shengyang Li, Shucheng You, and Liangpei Zhang. Land-                    longie, Jiebo Luo, Mihai Datcu, Marcello Pelillo, and Liang-
+     cover classification with high-resolution remote sensing im-             pei Zhang. Dota: A large-scale dataset for object detection
+     ages using transferable deep models. Remote Sensing of En-               in aerial images. In Proceedings of the IEEE conference on
+     vironment, 2020. 3, 1, 8                                                 computer vision and pattern recognition, pages 3974–3983,
+[57] Xin-Yi Tong, Gui-Song Xia, and Xiao Xiang Zhu. Enabling                  2018. 3, 2, 8
+     country-scale land cover mapping with meter-resolution              [69] Danni Yang, Ruohan Dong, Jiayi Ji, Yiwei Ma, Haowei
+     satellite imagery. ISPRS Journal of Photogrammetry and Re-               Wang, Xiaoshuai Sun, and Rongrong Ji. Exploring phrase-
+     mote Sensing, 196:178–196, 2023. 3, 1, 8                                 level grounding with text-to-image diffusion model. In Eu-
+[58] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert,                   ropean Conference on Computer Vision, pages 161–180.
+     Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov,                      Springer, 2024. 8
+
+
+                                                                    11
+[70] Zhao Yang, Jiaqi Wang, Yansong Tang, Kai Chen, Heng-
+     shuang Zhao, and Philip HS Torr. Lavt: Language-aware
+     vision transformer for referring image segmentation. In Pro-
+     ceedings of the IEEE/CVF conference on computer vision
+     and pattern recognition, pages 18155–18165, 2022. 2
+[71] Liang Yao, Fan Liu, Delong Chen, Chuanyi Zhang, Yijun
+     Wang, Ziyun Chen, Wei Xu, Shimin Di, and Yuhui Zheng.
+     Remotesam: Towards segment anything for earth observa-
+     tion. In Proceedings of the 33rd ACM International Confer-
+     ence on Multimedia, pages 3027–3036, 2025. 3, 4, 6, 7, 8, 2,
+     11
+[72] Liang Yao, Fan Liu, Hongbo Lu, Chuanyi Zhang, Rui Min,
+     Shengxiang Xu, Shimin Di, and Pai Peng. Remotereasoner:
+     Towards unifying geospatial reasoning workflow. arXiv
+     preprint arXiv:2507.19280, 2025. 2, 7
+[73] Licheng Yu, Patrick Poirson, Shan Yang, Alexander C Berg,
+     and Tamara L Berg. Modeling context in referring expres-
+     sions. In European conference on computer vision, pages
+     69–85. Springer, 2016. 6
+[74] Zhenghang Yuan, Lichao Mou, Yuansheng Hua, and
+     Xiao Xiang Zhu. Rrsis: Referring remote sensing image
+     segmentation. arXiv preprint arXiv:2306.08625, 2023. 2,
+     3
+[75] Yang Zhan, Zhitong Xiong, and Yuan Yuan. Rsvg: Exploring
+     data and models for visual grounding on remote sensing data.
+     IEEE Transactions on Geoscience and Remote Sensing, 61:
+     1–13, 2023. 2, 6, 8
+[76] Ao Zhang, Yuan Yao, Wei Ji, Zhiyuan Liu, and Tat-Seng
+     Chua. Next-chat: An lmm for chat, detection and segmen-
+     tation. In International Conference on Machine Learning,
+     pages 60116–60133. PMLR, 2024. 7
+[77] Wei Zhang, Miaoxin Cai, Tong Zhang, Yin Zhuang, Jun Li,
+     and Xuerui Mao. Earthmarker: A visual prompting multi-
+     modal large language model for remote sensing. IEEE Trans-
+     actions on Geoscience and Remote Sensing, 2024. 1
+[78] Wei Zhang, Miaoxin Cai, Tong Zhang, Yin Zhuang, and
+     Xuerui Mao. Earthgpt: A universal multimodal large lan-
+     guage model for multisensor image comprehension in re-
+     mote sensing domain. IEEE Transactions on Geoscience and
+     Remote Sensing, 62:1–20, 2024. 2
+[79] Yuanlin Zhang, Yuan Yuan, Yachuang Feng, and Xiaoqiang
+     Lu. Hierarchical and robust convolutional neural network
+     for very high-resolution remote sensing object detection.
+     IEEE Transactions on Geoscience and Remote Sensing, 57
+     (8):5535–5548, 2019. 3
+[80] Zheng Zhang, Yeyao Ma, Enming Zhang, and Xiang Bai.
+     Psalm: Pixelwise segmentation with large multi-modal
+     model. In European Conference on Computer Vision, pages
+     74–91. Springer, 2024. 2, 4, 6, 7, 8, 10
+[81] Yue Zhou, Mengcheng Lan, Xiang Li, Litong Feng, Yiping
+     Ke, Xue Jiang, Qingyun Li, Xue Yang, and Wayne Zhang.
+     Geoground: A unified large vision-language model for re-
+     mote sensing visual grounding, 2025. 7
+[82] Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shen-
+     glong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su,
+     Jie Shao, et al. Internvl3: Exploring advanced training and
+     test-time recipes for open-source multimodal models. arXiv
+     preprint arXiv:2504.10479, 2025. 3
+
+
+                                                                    12
+  UniGeoSeg: Towards Unified Open-World Segmentation for Geospatial Scenes
+                                             Supplementary Material
+7. Overview                                                        of seven land-cover classes, including urban, agriculture,
+                                                                   rangeland, forest, water, barren, and unknown.
+This supplementary material provides further details for               FLAIR [18] is a country-scale land-cover semantic seg-
+the proposed dataset GeoSeg-1M and benchmark GeoSeg-               mentation dataset for France. It is built from multi-source
+Bench, as well as the proposed model UniGeoSeg. These              optical imagery with 20 cm ground sampling distance, and
+details were omitted from the main body of the paper due to        contains more than 20 billion labeled pixels across more
+space constraints.                                                 than 817 km² of aerial acquisitions. In addition to spatial
+   The supplementary material is organized as follows:             data, FLAIR integrates temporal and spectral information
+• Section 8. Details of the GeoSeg-1M Dataset Creation.            from satellite time series, providing fine-grained annota-
+• Section 9. Statistics and Additional Samples of GeoSeg-          tions for land-use monitoring and segmentation research.
+  1M.                                                                  GID-15 [56] is a large-scale semantic segmentation
+• Section 10. More Details about GeoSeg-Bench.                     dataset based on Gaofen-2 satellite images. It consists
+• Section 11. More Details about Experiments.                      of 150 GF-2 images with pixel-level annotations covering
+• Section 12. Additional Examples of Model Predictions.            15 land-cover classes. The dataset provides two types of
+• Section 13. Evaluating UniGeoSeg with Alternative Lan-           ground-truth format: .png (grayscale labels) and .tiff (RGB
+  guage Model.                                                     palette), to facilitate different usage scenarios.
+• Section 14. Datasheets for GeoSeg-1M and GeoSeg-                     Globe230K [51] is a globally distributed land-cover
+  Bench.                                                           dataset consisting of approximately 232,819 image tiles of
+                                                                   size 512×512 pixels. The tiles have a 1-m ground sampling
+8. Details of the GeoSeg-1M Dataset Creation                       distance and are annotated with a set of land-use/land-cover
+                                                                   categories covering diverse geographic regions.
+8.1. Data Sources of GeoSeg-1M                                         LoveDA [62] is a semantic segmentation dataset con-
+To construct GeoSeg-1M, we aggregate a wide range                  structed from 0.3 m spatial-resolution images collected via
+of publicly available remote-sensing datasets that provide         the Google Earth platform. It covers both urban and ru-
+pixel-level or region-level annotations across diverse spa-        ral regions, providing scenes of varied spatial layouts. The
+tial resolutions, geographic regions, and semantic cate-           dataset includes six foreground classes, and offers pixel-
+gories. These datasets collectively supply the raw im-             level annotations for all categories.
+ages and masks from which our unified multimodal cor-                  MiniFrance [8] is a very-high-resolution aerial seman-
+pus is built. Below, we summarize the data sources used in         tic segmentation dataset released for the IEEE Data Fusion
+GeoSeg-1M and provide brief descriptions of each dataset.          Contest 2022 (DFC2022). It contains approximately 2,000
+    Chesapeake Land Cover [46] provides a high-                    VHR images annotated with 12 land-use/land-cover classes,
+resolution (1 m) land-cover classification for the Chesa-          based on the Urban Atlas project. The training split of
+peake Bay watershed, covering regions in Maryland, Vir-            MiniFrance includes both labeled and unlabeled images to
+ginia, West Virginia, Pennsylvania, Delaware, and Wash-            support semi-supervised learning.
+ington D.C. The dataset includes raster layers derived from            Potsdam [3] is a benchmark aerial segmentation dataset
+NAIP (Red, Green, Blue, NIR) imagery as well as Landsat-           consisting of 38 orthorectified tiles, each of size 6000×6000
+8 bands, with land-cover labels for classes such as water,         pixels, acquired with a ground sampling distance of 5 cm.
+tree canopy / forest, low vegetation, barren land, other im-       The images include four spectral bands (R, G, B, NIR), and
+pervious surfaces, roads, and no-data. The data was pro-           the corresponding ground-truth labels cover six semantic
+duced in collaboration between the Chesapeake Conser-              categories: impervious surfaces, buildings, low vegetation,
+vancy and USGS, and reflects coverage for multiple epochs          trees, cars, and background/clutter.
+(2013/2014, 2017/2018, and 2021/2022) with detailed land-              Vaihingen [3] is an aerial semantic segmentation dataset
+use and land-cover change products.                                composed of 33 image patches, captured at a ground sam-
+    DeepGlobe [14] dataset originates from the DeepGlobe           pling distance of 9 cm. The dataset provides both true or-
+2018 Satellite Image Understanding Challenge and includes          thophotos and corresponding digital surface models, and
+a land-cover segmentation track. For the segmentation /            its annotated classes include six categories: impervious
+land-cover component, it provides 803 RGB satellite im-            surfaces, buildings, low vegetation, trees, cars, and clut-
+ages of size 2448 × 2448 pixels with a ground sampling             ter/background.
+distance of approximately 0.5 m. The annotation consists               Five-Billion-Pixels [57] is a land-cover classification
+
+
+                                                               1
+dataset derived from Gaofen-2 satellite imagery with a spa-        8.2. Data Pre-processing of GeoSeg-1M
+tial resolution of 4 m. It contains more than five billion
+                                                                   The raw data used to construct GeoSeg-1M originate from
+labeled pixels distributed across 150 large-area scenes and
+                                                                   multiple remote sensing benchmarks with substantial varia-
+is annotated with 24 land-cover classes.
+                                                                   tions in spatial resolution, sensor characteristics, annotation
+    FAIR1M [54] is a large-scale fine-grained object detec-        formats, and category taxonomies. These datasets typically
+tion dataset in high-resolution remote sensing imagery. It         provide large aerial images paired with semantic segmen-
+contains over 15,000 images with a spatial resolution be-          tation masks encoded in heterogeneous ways (e.g., indexed
+tween 0.3 m and 0.8 m, collected from Gaofen-2 satel-              masks, palette masks, or RGB-encoded labels). Such in-
+lites and Google Earth. The dataset comprises more than            consistencies make unified processing and subsequent mul-
+1 million object instances, annotated with rotated bounding        timodal instruction generation difficult. To ensure com-
+boxes across 5 main categories (airplanes, ships, vehicles,        patibility across sources and create a standardized corpus
+courts, roads) and 37 sub-categories.                              suitable for multimodal segmentation, we perform a unified
+                                                                   preprocessing pipeline on all images and masks.
+   DIOR [26] is a large-scale object detection dataset                 Patch Extraction. We adopt a sliding-window strategy
+comprising 23,463 remote-sensing images annotated with             to extract fixed-size patches from both images and masks.
+192,472 object instances from 20 categories. The images            Each image is divided into patches of 512 × 512 pixels with
+exhibit variations in viewpoints, scenes, and spatial res-         a stride of 256. The corresponding masks are cropped using
+olutions, and each object is annotated using axis-aligned          identical window parameters to maintain spatial alignment.
+bounding boxes.
+                                                                       Mask Standardization. All annotations are converted
+   DOTA [68] is an aerial image dataset for object detection       into single-channel categorical masks with integer IDs. Re-
+containing 2,806 images with sizes ranging from 800×800            gardless of the original encoding format, every pixel is
+to 4000×4000 pixels. It includes 188,282 annotated object          mapped to a unified category index. This enables uniform
+instances from 15 categories, where each object is labeled         downstream parsing while preserving the semantics of each
+with a bounding box allowing arbitrary orientations.               dataset. We then consolidate all category label definitions
+                                                                   into a unified taxonomy. Through synonym merging, we
+   For FAIR1M, DIOR, and DOTA, which provide region-               produce a standardized set of 117 semantic categories. This
+level annotations in the form of bounding boxes rather             harmonization ensures that patches originating from differ-
+than pixel-level masks, we convert the box annotations into        ent datasets share a consistent semantic space and can be
+segmentation masks using the procedure of SAMRS[60].               used jointly for training a single segmentation model.
+This conversion allows all region-level annotations from               Instance Candidate Extraction. To support object-
+FAIR1M, DIOR, and DOTA to be integrated into our uni-              centric instruction-driven tasks such as referring segmen-
+fied pixel-based segmentation framework.                           tation, we further decompose the semantic masks into
+    RRSIS-D [33] consists of 17,402 image–text–mask                instance-level candidates. Since most remote sensing
+triplets intended for the referring segmentation task in re-       datasets provide class-wise semantic masks rather than in-
+mote sensing. The images in RRSIS-D have a size of                 stance annotations, we apply connected-component analy-
+800×800 pixels, covering a variety of ground sampling dis-         sis (using 8-connectivity) to each semantic category map.
+tances (from 0.5 m to 0.3 m), and the dataset includes 20          Each connected region is treated as a potential instance
+object categories described in natural-language expressions.       for subsequent evaluation and instruction generation. Only
+                                                                   minimal sanity checks—such as removing extremely tiny
+   EarthReason [29] is a benchmark for a novel remote-             isolated regions or invalid labels—are applied at this stage;
+sensing task called geospatial pixel reasoning. The dataset        the full quality assessment is deferred to the mask filtering
+contains 5,434 manually annotated image masks and over             pipeline described in the next subsection.
+30,000 implicit question-answer pairs, where each question             This preprocessing stage yields a unified collection of
+describes a target region in an image in a reasoning style         standardized image patches, normalized masks, harmonized
+rather than direct naming. The dataset supports implicit           categories, and instance-level region proposals, which to-
+querying, requiring models to infer masks from contextual          gether form the basis for the subsequent high-quality mask
+and spatial clues rather than explicit instructions.               filtering and instruction construction procedures.
+   RemoteSAM-270K [71] is a large-scale generalized re-
+ferring expression segmentation dataset for remote sensing,
+                                                                   8.3. Mask Filtering of GeoSeg-1M
+consisting of 270K image-text-mask triplets. It covers 297         After obtaining instance-level region proposals from
+object categories and 16 fine-grained attribute types with         connected-component decomposition, we perform a two-
+an average of 3.17 attributes per sample, supporting multi-        stage mask filtering pipeline to ensure that only high-
+target, no-target, and single-target expressions.                  quality, semantically meaningful regions are preserved for
+
+                                                               2
+Figure 4. The three mask marking strategies we tried in model-based mask filtering. (a) Boundary-only highlight. (b) Semi-transparent
+filled-mask overlay. (c) The original image and the binary mask
+
+
+
+
+Figure 5. The prompt of InternVL3 for mask filtering. The images marked with ✓ in the top-right corner are retained, as their mask regions
+exhibit clear semantic structure, while the images marked with × in the bottom-right corner are filtered out due to ambiguous semantics.
+
+
+instruction generation. This process is designed to remove              in referring and reasoning tasks, instances from the same
+noisy, ambiguous, or low-value regions that commonly                    category are restricted as follows:
+arise from fragmented masks and inconsistent labeling in                (i) Each region must not belong to a category with more
+remote sensing datasets.                                                than six instances in the same patch, preventing confusion
+                                                                        when many small, similar objects cluster together.
+   Rule-Based Filtering. In the first stage, we apply rule-
+based filtering guided by geometric and contextual con-                 (ii) For each candidate region, no other instance of the same
+straints. Each instance mask must occupy between 0.5%                   category may lie within a 15-pixel radius, ensuring that
+and 70% of the patch area; extremely small regions pro-                 fragmented or closely adjacent subregions are not incor-
+vide insufficient visual cues while excessively large ones              rectly treated as distinct objects.
+often cover entire landcover zones that are unsuitable for              (iii) To maintain dataset diversity and prevent over-
+instruction-driven segmentation tasks. To avoid ambiguity               representation of dominant classes, at most two instances
+
+
+                                                                    3
+                           Figure 6. The prompt of GPT-4o for attribute reasoning instruction generation.
+
+
+per category in each patch are randomly sampled to enter             representation maintains precise localization cues without
+the next evaluation stage. These constraints effectively sup-        compromising scene context. Using this visualization, In-
+press low-quality regions while preserving category variety          ternVL3 is prompted to judge semantic soundness, visual
+across the dataset.                                                  distinctiveness, and unambiguous localization of the region,
+    Model-Based Filtering. In the second stage, we per-              based on the instruction shown in Fig. 5. Only regions vali-
+form a model-based assessment using InternVL3 to further             dated by the model proceed to instruction construction.
+evaluate whether each region can serve as a meaningful                  Together, this two-stage filtering pipeline substantially
+standalone segmentation target. Rather than feeding raw bi-          improves annotation quality by removing ambiguous, noisy,
+nary masks—which completely fill the region and obscure              or low-information regions and ensuring that the retained
+internal appearance—we generate an outline-based visual-             masks correspond to visually clear, contextually meaning-
+ization that draws a thin contour around the candidate re-           ful, and well-defined objects suitable for instruction-driven
+gion while preserving all underlying image content. This             segmentation tasks.
+representation keeps both the object and its surroundings
+fully visible, providing richer cues for quality assessment.         8.4. Reasoning Instruction Generation
+    Before settling on this approach, we tried three mask            To construct high-quality reasoning instructions, we design
+marking strategies: (i) boundary-only highlighting, (ii)             a multi-stage pipeline that selects category-diverse images,
+semi-transparent filled-mask overlays, and (iii) supplying           differentiates attribute reasoning from contextual reasoning
+the original image and the mask as separate inputs, as shown         cases, and employs both GPT-4o and open-source VLMs
+in Fig. 4. Human inspection and initial model responses              for generation and cross-evaluation, respectively.
+indicated that boundary-only visualization offers the most              Semantic Diversity Filtering. We first ensure that the
+reliable evaluations. Filled overlays tend to partially hide         images entering this stage possess sufficiently diverse se-
+texture and boundary details, while separate-mask inputs             mantic content. For each dataset, we compute the empirical
+reduce contextual awareness. In contrast, the outline-based          distribution of object categories based on the correspond-
+
+
+                                                                 4
+                     Figure 7. The prompt of GPT-4o for the first step of context reasoning instruction generation.
+
+
+
+
+                   Figure 8. The prompt of GPT-4o for the second step of context reasoning instruction generation.
+
+
+ing masks and rank images by the number of distinct cate-              dataset-specific statistics, they generally correspond to se-
+gories they contain. Only images within the high-diversity             lecting roughly the top decile.
+tier of the distribution of each dataset are preserved for fur-
+ther processing. Although exact thresholds differ due to                 Reasoning Type Assignment. For every selected image,
+                                                                       we determine the reasoning type by examining how many
+
+
+                                                                   5
+       Figure 9. The prompt of InternVL3 and QwenVL2 for evaluating the quality of reasoning image–mask–instruction triplets.
+
+
+regions belong to same semantic category. Images contain-                 Quality Filtering.       All resulting triplets of im-
+ing a single instance of the target category are treated as           age–mask–instruction are further validated through cross-
+attribute reasoning cases, whereas images containing two              model evaluation using QwenVL2-72B and InternVL3-
+or three instances are designated as contextual reasoning             78B. Both models score each sample along multiple di-
+cases. This separation enables us to distinguish samples              mensions, including task complexity and implicitness, im-
+that require reasoning about intrinsic properties from those          age–text consistency and reasoning soundness, uniqueness
+involving relational or discriminative understanding.                 of the target, mask quality and semantic significance, clarity
+                                                                      and naturalness of the question, and conciseness of the ex-
+   Attribute Reasoning Prompt. For attribute reasoning
+                                                                      planation. The scoring prompt is provided in Fig. 9. Each
+samples, GPT-4o receives two inputs—the image with the
+                                                                      dimension has a task-specific threshold, and only samples
+target region outlined using a thin contour and the list of all
+                                                                      that exceed all thresholds across both evaluators are re-
+categories present in the image—and is instructed to pro-
+                                                                      tained. After this filtering, the final reasoning subset con-
+duce a question centered on attributes, functional roles, or
+                                                                      tains 104,989 samples, including 63,567 attribute reasoning
+other intrinsic characteristics. The corresponding prompt
+                                                                      samples and 41,422 context reasoning samples.
+template is shown in Fig. 6.
+   Context Reasoning Prompt. Context reasoning sam-                   8.5. Referring Instruction Generation
+ples involve a two-stage generation process. All same-
+category regions are highlighted using distinct colors to             To construct the referring segmentation subset, we employ a
+clearly separate them. GPT-4o first produces two to three             unified prompting template that guides GPT-4o to produce
+explicit visual cues that distinguish the highlighted regions         concise and unambiguous referential expressions for each
+in terms of spatial arrangement, geometry, or appearance              candidate region. As shown in Fig. 10, the prompt provides
+(prompt in Fig. 7). These cues, together with the original            the image patch, the semantic class of the target region, and
+image, are then used in a second GPT-4o step, where the               a strict output format beginning with “Question:”. The only
+model generates a reasoning question and a concise expla-             emphasized requirement in the template is that the expres-
+nation grounded in contextual or relational understanding             sion must clearly and uniquely identify the region based on
+(prompt in Fig. 8).                                                   interpretable cues.
+
+
+                                                                  6
+                               Figure 10. The prompt of GPT-4o for referring instruction generation.
+
+
+
+
+      Figure 11. The prompt of InternVL3 and QwenVL2 for evaluating the quality of referring image–mask–instruction triplets.
+
+
+   A notable effect of this design is that the generated in-        8.6. Interactive Instruction Generation
+structions naturally rely on contextual and spatial informa-
+                                                                    For interactive segmentation, we generate point- and box-
+tion—such as relative position, surrounding structures, or
+                                                                    based instructions from mask annotations. For each mask
+functional cues—rather than superficial attributes like color
+                                                                    region, we sample k ∈ {1, 2, 3} points and normalize their
+or size. This leads to more meaningful and semantically
+                                                                    coordinates to the [0, 1] range along both image axes. The
+grounded referring expressions, consistent with real-world
+                                                                    number of points k is determined adaptively according to
+remote sensing interpretation.
+                                                                    the mask size: regions with fewer than 200 pixels are as-
+                                                                    signed a single point, whereas larger regions follow a dis-
+   Following instruction generation, all samples un-                tribution in which single-point prompts account for 60%
+dergo cross-model validation using InternVL3-78B and                of cases, and two- or three-point prompts each account for
+QwenVL2-72B. Both models independently evaluate each                20%. Denoting the normalized coordinates of the sampled
+instruction–image pair using the scoring prompt shown               points as (xi , yi ), i = 1, . . . , k, the points are inserted into
+in Fig. 11, assessing clarity, grounding, consistency, and          a fixed template: “Please segment the region/target corre-
+uniqueness of the reference. Only samples that satisfy the          sponding to the points {(x1 , y1 ), . . . , (xk , yk )}.”
+required thresholds across both evaluators are retained. Af-            For each mask, we compute the tight bounding box
+ter this stage, the final referring subset contains 336,311         defined by the top-left corner (xmin , ymin ) and bottom-
+high-quality region–instruction pairs.                              right corner (xmax , ymax )), and normalize all coordinates to
+
+
+                                                                7
+                                                       Table 10. Statistics of GeoSeg-1M.
+
+ Subset        Samples (generated)   Samples (total)   Avg Text Length   Categories   Average Mask Size              Other Statistics
+ Referring          336,311             560,179          12.05 words         100            18.4 K                          -
+                                                                                                                     Point:242,488
+ Interactive        480,949             480,949          9.80 words          106            15.5 K
+                                                                                                                     Box: 238,461
+                                                                                                                    Attribute: 63,567
+ Reasoning          104,989             119,214          23.93 words         108            14.8 K
+                                                                                                                   Contextual: 41,422
+                                                                                                                  Resolution: 0.05–153 m
+                                                                                                           Sources1 : C, DG, FB, FL, GI, GL, L
+ Overall            922,249            1,148,504         12.18 words         117            17.0 K
+                                                                                                          M, P, Va, FA, DO, DI, EarthReason [29]
+                                                                                                             RemoteSAM [71], RRSIS-D [33]
+
+1 C:Chesapeake [46], DG:DeepGlobe [14], FB:Five-Billion-Pixel [57], FL:FLAIR [18], GI:GID-15 [56], GL:Globe230K [51],
+L:LoveDA [62], M:MiniFrance [8], P:Potsdam [3], Va:Vaihingen [3], FA:FAIR1M [54], DO:DOTA [68], DI:DIOR [26].
+
+
+[0, 1]. These coordinates are then inserted into the template:               active subset includes 2,870 samples, with 1,435 samples
+“Please segment the region/target corresponding to the box                   using point-based prompts and 1,435 samples using box-
+x0,y0=[xmin ,ymin ], x1,y1=[xmax ,ymax ].”                                   based prompts. The referring subset consists of 2,311 sam-
+    This procedure produces 480,949 interactive samples,                     ples. The benchmark covers 102 semantic categories. The
+providing consistent and structured supervision for both                     full list of categories and the corresponding quantity distri-
+point- and box-driven segmentation tasks.                                    butions are provided in Tab. 15. These statistics illustrate
+                                                                             the overall diversity and balance of GeoSeg-Bench, sup-
+9. Statistics and Additional Samples of                                      porting comprehensive evaluation across reasoning, refer-
+   GeoSeg-1M                                                                 ring, and interactive segmentation tasks.
+                                                                                To further illustrate the composition and annotation
+Tab. 10 presents detailed statistics of the GeoSeg-1M                        style of GeoSeg-Bench, we present additional representa-
+dataset. The dataset is divided into three subsets corre-                    tive samples in Fig. 14.
+sponding to the main segmentation tasks: referring, in-
+teractive, and reasoning. For each subset, we report the
+                                                                             11. More Details about Experiments
+number of samples generated in our pipeline, as well as
+the total number of samples including integrated external                    11.1. Implementation Details for UniGeoSeg
+datasets. The average text length indicates the typical in-
+                                                                             The subset with DIOR-derived data excluded. To bet-
+struction length for each task, while the number of cat-
+                                                                             ter examine the generalization behavior of UniGeoSeg un-
+egories reflects the semantic diversity covered. We also
+                                                                             der unfamiliar data sources, we additionally construct a
+provide the average mask size per subset and task-specific
+                                                                             subset of GeoSeg-1M by removing all samples originating
+statistics, such as point/box distribution for interactive sam-
+                                                                             from the DIOR [26] family of datasets. The resulting sub-
+ples and attribute/context counts for reasoning samples.
+                                                                             set contains 970,238 samples, comprising 109,274 reason-
+Overall, GeoSeg-1M contains more than 1.14 million im-
+                                                                             ing, 431,204 referring, and 429,760 interactive instances.
+age–mask–instruction triplets spanning 117 categories, ag-
+                                                                             Since the downstream benchmarks SIOR [60] and DIOR-
+gregated from multiple remote sensing sources. The seman-
+                                                                             RSVG [75] are themselves derived from DIOR, exclud-
+tic categories are listed in Tab. 14, and their overall quantity
+                                                                             ing DIOR-based training data mitigates this source-specific
+distribution is shown in Fig. 12. The distributions of cate-
+                                                                             overlap and provides a more independent setting for evalu-
+gories for the reasoning, referring, and interactive tasks are
+                                                                             ating the model’s cross-task generalization.
+also presented separately.
+                                                                                 The subset used in ablations. To conduct the ab-
+    To complement the main paper, Fig. 13 presents addi-
+                                                                             lation studies of task-adaptive text enhancement (TATE)
+tional GeoSeg-1M samples that highlight the visual richness
+                                                                             and latent knowledge memory (LKM) under a manage-
+and instruction diversity of the dataset.
+                                                                             able computational budget, we further construct a compact
+10. More details about GeoSeg-Bench                                          subset of 141,132 samples within the DIOR-excluded por-
+                                                                             tion of GeoSeg-1M. This subset comprises 42,699 reason-
+GeoSeg-Bench comprises 6,892 samples organized into                          ing, 55,481 referring, and 42,952 interactive instances ran-
+three subsets corresponding to reasoning, interactive, and                   domly sampled from the remaining data. We then evaluate
+referring segmentation tasks. The reasoning subset con-                      the resulting models on the reasoning and referring tasks
+tains 1,711 samples, including 1,150 attribute reasoning in-                 of GeoSeg-Bench, as well as on zero-shot interactive seg-
+stances and 561 contextual reasoning instances. The inter-                   mentation on SIOR, enabling a focused examination of how
+
+
+                                                                         8
+Figure 12. Class distribution in GeoSeg-1M. (a) Overall class distribution across the entire dataset. (b–d) Class distributions for each
+specific task: (b) Reasoning segmentation, (c) Referring segmentation, and (d) Interactive segmentation.
+
+
+each module affects both the accuracy and the generaliza-              understanding. UniGeoSeg, in contrast, does not use SAM
+tion capability of UniGeoSeg.                                          and relies on a single visual encoder. Table 12 summarizes
+    Training Configuration. All experiments are conducted              these architectural differences across models.
+with bfloat16 precision on eight NVIDIA A800 GPUs. In-                     Building on this comparison, UniGeoSeg employs a
+put images are resized to 512 × 512. We use the AdamW                  streamlined and efficient architecture. It relies on a single
+optimizer with an initial learning rate of 1 × 10−4 , a cosine         Swin-B[34] visual encoder, reducing structural redundancy
+decay schedule, and a warmup ratio of 0.03. Weight decay               and computational overhead while maintaining strong vi-
+is set to 0.0. The progressive task scheduling (PTS) strategy          sual feature representation. The language backbone of Uni-
+is applied: the sampling weight of interactive segmentation            GeoSeg is relatively small, which further contributes to
+gradually decreases to 0.7, with the remaining weight as-              efficiency. Despite not using SAM encoder, UniGeoSeg
+signed to reasoning samples. Batch size is set to 16, and              achieves core SAM-like functionality by integrating in-
+each experiment is trained for 3 epochs. Data loading uses             teractive segmentation instructions and embedding visual
+4 workers per GPU, and lazy preprocessing is enabled to                prompts directly into the textual input space during train-
+accelerate training. Additional hyper-parameters and im-               ing. Consequently, UniGeoSeg provides a compact and
+plementation details are summarized in Tab. 11.                        lightweight architecture that captures both language-guided
+11.2. Comparison with Other Architectures                              and pixel-level cues, demonstrating advantages over both
+                                                                       dual-encoder models and other single-encoder baselines.
+We compare UniGeoSeg with several baseline models in
+terms of their visual encoder, language backbone, and the
+use of dual visual encoders. Notably, some baselines incor-            12. Additional Examples of Model Predictions
+porate Segment Anything Model (SAM), employing a dual-
+encoder setup: one encoder provides image features to the              This section presents additional qualitative results to further
+segmentation decoder, while a second encoder aligned with              illustrate the behavior of the model in various scenarios, as
+the LLM backbone supplies features for language-guided                 shown in Fig. 15.
+
+
+                                                                   9
+                                   Table 11. Supplementary training hyper-parameters and setup.
+
+                       Parameter                 Value            Parameter                Value
+                       Precision                 bfloat16         GPUs                     8 × NVIDIA A800
+                       Image Size                512 × 512        Batch Size               16
+                       Training Epochs           3                Optimizer                AdamW
+                       Initial LR                1 × 10−4         LR Schedule              Cosine decay
+                       Warmup Ratio              0.03             Weight Decay             0.0
+                       Gradient Checkpointing    Enabled          Data Loader Workers      4
+                       PTS Sampling              Decays to 0.7    ZeRO Stage               ZeRO 2
+
+Table 12. Comparison of UniGeoSeg with baseline model architectures. The “Encoder Configuration” column denotes the visual encoder
+setup: Dual-encoder indicates a SAM-based encoder for the segmentation decoder plus a second LLM-aligned encoder, while Single-
+encoder indicates only one visual encoder is used.
+
+                   Method                  Vision Encoder              LLM Type         Encoder Configuration
+                   LISA[25]                 CLIP-L[43]             Vicuna-7B[12]             Dual-encoder
+                   PixelLM[45]                CLIP-L                 Vicuna-7B               Dual-encoder
+                   PSALM[80]                Swin-B[34]           Phi-1.5(1.3B)[31]          Single-encoder
+                   Geopixel[48]               CLIP-L             InternLM2-7B[7]             Dual-encoder
+                   Geopix[40]                 CLIP-L              Llama-2-7B[58]            Single-encoder
+                   Earthmind[52]           InternViT[10]         InternVL2-4B[10]            Dual-encoder
+                   LISAt[42]              RemoteCLIP[32]             Vicuna-7B               Dual-encoder
+                   Segearth-R1[29]            Swin-B               Phi-1.5(1.3B)            Single-encoder
+                   Ours (UniGeoSeg)             Swin-B                Phi-1.5(1.3B)         Single-encoder
+
+
+13. Evaluating UniGeoSeg with Alternative                                 A: The GeoSeg-1M and GeoSeg-Bench datasets
+    Language Model                                                        were created to address the lack of large-scale,
+                                                                          high-quality multimodal segmentation data in re-
+In this section, we examine the flexibility of UniGeoSeg                  mote sensing, a bottleneck that limits the develop-
+by replacing its original Phi-1.5 [31] language backbone                  ment of unified vision–language segmentation mod-
+with DeepSeek-7B-Chat [6]. The model is trained on                        els.     GeoSeg-1M provides a million-level collec-
+GeoSeg-1M under the same settings as the main configu-                    tion of image–mask–instruction triplets covering refer-
+ration and evaluated on the EarthReason [29] and RRSIS-                   ring, reasoning, and interactive segmentation, enabling
+D [33] benchmarks. While switching the language back-                     instruction-driven multimodal understanding at scale.
+bone naturally introduces some variation in overall perfor-               GeoSeg-Bench complements it with a carefully designed
+mance, the DeepSeek-based variant still maintains compet-                 evaluation suite for assessing fine-grained reasoning
+itive segmentation quality.                                               ability, context-aware grounding, and interactive seg-
+    To further validate the general applicability of our pro-             mentation performance. Together, these two datasets
+posed modules TATE, LKM, and PTS, we perform addi-                        aim to support the training and rigorous benchmarking
+tional ablation studies using an alternative backbone. Fol-               of general-purpose remote sensing segmentation models
+lowing identical training and evaluation protocols, we re-                capable of robust instruction following and comprehen-
+move each module in turn and report the results in Tab. 13.               sive scene understanding.
+The consistent performance gains observed for UniGeoSeg                2. “Who created the dataset (e.g., which team, research
+across different language model architectures indicate that               group) and on behalf of which entity?”
+these modules are largely model-agnostic and provide ro-                  A: The dataset was created by the following authors:
+bust improvements independent of the underlying LLM.                      • Anonymous authors
+                                                                       3. “Who funded the creation of the dataset?”
+14. Datasheets                                                            A: The dataset creation was funded by the affiliations of
+                                                                          the authors involved in this work.
+14.1. Motivation
+1. “For what purpose was the dataset created?”
+
+
+                                                                 10
+                            Table 13. Results on EarthReason and RRSIS-D of UniGeoSeg-DeepSeek7B.
+
+                                      EarthReason (Val)                   EarthReason (Test)                      RRSIS-D
+Method
+                                    cIoU             gIoU                cIoU            gIoU             cIoU              gIoU
+UniGeoSeg-DeepSeek7B
+                                    67.37           65.03               65.92            64.23            71.52             60.02
+(w/o TATE, LKM, and PTS)
+UniGeoSeg-DeepSeek7B            71.41 (+4.04)   68.88 (+3.85)     71.93 (+6.01)      69.17 (+4.94)   75.12 (+3.60)     65.75 (+5.73)
+
+
+14.2. Composition                                                         A: Yes, the relationship between individual instances is
+                                                                          explicit.
+Most of the questions in this section are intended to provide          7. “Are there recommended data splits (e.g., training, de-
+dataset consumers with the information they need to make                  velopment/validation, testing)?”
+informed decisions about using the dataset for their chosen               A: The GeoSeg-1M is designed to train the RS MLLMs
+tasks. Some of the questions are designed to elicit informa-              for instruction-driven segmentation, and the GeoSeg-
+tion about compliance with the EU’s General Data Protec-                  Bench is designed to evaluation.
+tion Regulation (GDPR) or comparable regulations in other              8. “Is the dataset self-contained, or does it link to or oth-
+jurisdictions. Questions that apply only to datasets that re-             erwise rely on external resources (e.g., websites, tweets,
+late to people are grouped together at the end of the section.            other datasets)?”
+We recommend taking a broad interpretation of whether a                   A: GeoSeg-1M and GeoSeg-Bench are self-contained
+dataset relates to people. For example, any dataset contain-              and will be open-sourced on platforms like Hugging
+ing text that was written by people relates to people.                    Face for easy use.
+1. “What do the instances that comprise our datasets rep-              9. “Does the dataset contain data that might be considered
+    resent (e.g., documents, photos, people, countries)?”                 confidential (e.g., data that is protected by legal privi-
+    A: The dataset primarily consists of remote sensing im-               lege or by doctor–patient confidentiality, data that in-
+    ages captured by satellites and drones, along with their              cludes the content of individuals’ non-public communi-
+    corresponding textual annotations. All datasets utilized              cations)?”
+    in GeoSeg-1M and GeoSeg-Bench are publicly accessi-                   A: No, all data are clearly licensed.
+    ble and nonprofit.                                                10. “Does the dataset contain data that, if viewed directly,
+2. “How many instances are there in total (of each type, if               might be offensive, insulting, threatening, or might oth-
+    appropriate)?”                                                        erwise cause anxiety?”
+    A: GeoSeg-1M includes 1,148,504 image-mask-                           A: No, GeoSeg-1M and GeoSeg-Bench do not contain
+    instruction triplets . Details could be found in the                  any data with negative information.
+    main text. GeoSeg-Bench consists of 6,892 samples,
+    including 2,870 interactive, 2,311 referring, and 1,711            14.3. Collection Process
+    reasoning segmentation samples.
+3. “Does the dataset contain all possible instances or is it           In addition to the goals outlined in the previous section, the
+    a sample (not necessarily random) of instances from a              questions in this section are designed to elicit information
+    larger set?”                                                       that may help researchers and practitioners create alterna-
+    A: The images in GeoSeg-1M and GeoSeg-Bench                        tive datasets with similar characteristics. Again, questions
+    are sourced from existing detection and segmentation               that apply only to datasets that relate to people are grouped
+    datasets. Except for the samples from RemoteSAM [71],              together at the end of the section.
+    RRSIS-D [33], and EarthReason [29] in GeoSeg-1M, all               1. “How was the data associated with each instance ac-
+    textual annotations were independently created by us.                  quired?”
+4. “Is there a label or target associated with each in-                    A: The images in GeoSeg-1M and GeoSeg-Bench
+    stance?”                                                               are sourced from existing detection and segmentation
+    A: Yes, for these images, we have provided image-mask-                 datasets. We enrich these with annotations. Details are
+    instruction triplets instances.                                        shown in the Section 3 in main text.
+5. “Is any information missing from individual instances?”             2. “What mechanisms or procedures were used to collect
+    A: No, each individual instance is complete.                           the data (e.g., hardware apparatuses or sensors, manual
+6. “Are relationships between individual instances made                    human curation, software programs, software APIs)?”
+    explicit (e.g., users’ movie ratings, social network                   A: GeoSeg-1M is constructed by integrating multi-
+    links)?”                                                               ple publicly available remote sensing datasets collected
+
+
+                                                                 11
+   from airborne and satellite imaging platforms with di-                the data available?”
+   verse spatial resolutions. All images and pixel-level                 A: Yes, the necessary software used to preprocess and
+   masks originate from their respective sources without                 clean the data is publicly available.
+   additional sensor deployment. Data consolidation, pre-
+   processing, and annotation standardization were per-               14.5. Uses
+   formed through automated software pipelines, includ-               The questions in this section are intended to encourage
+   ing unified format conversion, image tiling, connected-            dataset creators to reflect on tasks for which the dataset
+   region decomposition, and large-scale mask filtering.              should and should not be used. By explicitly highlight-
+   Instruction annotations were generated using GPT-                  ing these tasks, dataset creators can help dataset consumers
+   4o through API-based prompting, followed by cross-                 make informed decisions, thereby avoiding potential risks
+   evaluation with open-source vision-language models.                or harms.
+   No manual labeling was introduced beyond quality ver-              1. “Has the dataset been used for any tasks already?”
+   ification of a small subset for prompt and pipeline val-              A: No.
+   idation. GeoSeg-Bench was further curated by two do-               2. “Is there a repository that links to any or all papers or
+   main experts in remote sensing, who independently re-                 systems that use the dataset?”
+   viewed and cross-validated candidate samples to ensure                A: Yes, we will provide such links in the GitHub and the
+   high-quality and unambiguous ground truth.                            Huggingface repository.
+3. “If the dataset is a sample from a larger set, what was            3. “What (other) tasks could the dataset be used for?”
+   the sampling strategy (e.g., deterministic, probabilistic             A: GeoSeg-1M provides extensive annotations for
+   with specific sampling probabilities)?”                               instruction-driven segmentation tasks. It could be used
+   A: Please refer to the details listed in the main text Sec-           to train the MLLMs. GeoSeg-Bench provides high-
+   tion 3.                                                               quality samples in interactive, referring, and reasoning
+                                                                         segmentation tasks. It could be used to evaluate the
+14.4. Preprocessing, Cleaning, and Labeling                              MLLMs.
+The questions in this section are intended to provide dataset         4. “Is there anything about the composition of the
+consumers with the information they need to determine                    dataset or the way it was collected and prepro-
+whether the “raw” data has been processed in ways that are               cessed/cleaned/labeled that might impact future uses?”
+compatible with their chosen tasks. For example, text that               A: No.
+has been converted into a “bag-of-words” is not suitable for          5. “Are there tasks for which the dataset should not be
+tasks involving word order.                                              used?”
+1. “Was any preprocessing/cleaning/labeling of the data                  A: N/A.
+   done (e.g., discretization or bucketing, tokenization,
+                                                                      14.6. Distribution
+   part-of-speech tagging, SIFT feature extraction, removal
+   of instances, processing of missing values)?”                      Dataset creators should provide answers to these questions
+   A: Yes. Extensive preprocessing and cleaning were ap-              prior to distributing the dataset either internally within the
+   plied to unify heterogeneous remote sensing datasets.              entity on behalf of which the dataset was created or exter-
+   All images were tiled into 512×512 patches with a stride           nally to third parties.
+   of 256, and masks were converted into a unified binary             1. “Will the dataset be distributed to third parties outside
+   format. Each mask was decomposed into connected re-                   of the entity (e.g., company, institution, organization) on
+   gions to isolate individual objects. A two-stage filter-              behalf of which the dataset was created?”
+   ing pipeline was used to remove low-quality or noisy                  A: The datasets will be made publicly accessible to the
+   regions, combining rule-based screening with model-                   research community.
+   based quality assessment. Categories across datasets               2. “How will the dataset be distributed (e.g., tarball on
+   were merged into a harmonized taxonomy. Instruction                   website, API, GitHub)?”
+   annotations were automatically generated and subse-                   A: We will provide GeoSeg-1M and GeoSeg-Bench in
+   quently cross-evaluated by large vision–language mod-                 the GitHub and the Huggingface repository.
+   els. No manual relabeling was added beyond limited                 3. “When will the dataset be distributed?”
+   spot-checking for validation.                                         A: We will create a repository to release the data once
+2. “Was the ‘raw’ data saved in addition to the prepro-                  the paper is officially published.
+   cessed/cleaned/labeled data (e.g., to support unantici-            4. “Will the dataset be distributed under a copyright or
+   pated future uses)?”                                                  other intellectual property (IP) license, and/or under ap-
+   A: Yes, raw data is accessible.                                       plicable terms of use (ToU)?”
+3. “Is the software that was used to preprocess/clean/label              A: Yes, the dataset will be released under the Creative
+
+                                                                 12
+   Commons Attribution-NonCommercial-ShareAlike 4.0
+   International License.
+5. “Have any third parties imposed IP-based or other re-
+   strictions on the data associated with the instances?”
+   A: No.
+6. “Do any export controls or other regulatory restrictions
+   apply to the dataset or to individual instances?”
+   A: No.
+14.7. Maintenance
+As with the questions in the previous section, dataset cre-
+ators should provide answers to these questions prior to
+distributing the dataset. The questions in this section are
+intended to encourage dataset creators to plan for dataset
+maintenance and communicate this plan to dataset con-
+sumers.
+1. “Who will be supporting/hosting/maintaining the
+   dataset?”
+   A: The authors of this work serve to support, host, and
+   maintain the datasets.
+2. “How can the owner/curator/manager of the dataset be
+   contacted (e.g., email address)?”
+   A: They can be contacted via the email addresses listed
+   on the paper or webpage.
+3. “Is there an erratum?”
+   A: There is no explicit erratum; updates and known er-
+   rors will be specified in future versions.
+4. “Will the dataset be updated (e.g., to correct labeling
+   errors, add new instances, delete instances)?”
+   A: Future updates (if any) will be posted on the dataset
+   website.
+5. “Will older versions of the dataset continue to be sup-
+   ported/hosted/maintained?”
+   A:
+   Yes. This initial release will be updated in the future,
+   with older versions replaced as new updates are posted.
+6. “If others want to extend/augment/build on/contribute to
+   the dataset, is there a mechanism for them to do so?”
+   A: Yes, we will provide detailed instructions for future
+   extensions.
+
+
+
+
+                                                              13
+                                 Table 14. The 117 semantic categories included in GeoSeg-1M.
+
+1. Urban Land                                     2. Agriculture Land                      3. Rangeland
+4. Forest Land                                    5. Water                                 6. Barren Land
+7. Low Vegetation / Field                         8. Impervious (Other)                    9. Road
+10. Industrial Land                               11. Urban Residential                    12. Rural Residential
+13. Paddy Field                                   14. Irrigated Land                       15. Dry Cropland
+16. Garden Plot                                   17. Arbor Woodland                       18. Shrub Land
+19. Natural Grassland                             20. Artificial Grassland                 21. River
+22. Lake                                          23. Pond                                 24. Background
+                                                  26. Industrial/Commercial/Public/
+25. Building                                                                               27. Mine/Dump/Construction Sites
+                                                  Military/Private/Transport Units
+28. Artificial Non-Agricultural Vegetated Areas   29. Arable Land (Annual Crops)           30. Permanent Crops
+31. Pastures                                      32. Complex/Mixed Cultivation Patterns   33. Orchards at Urban Fringe
+34. Herbaceous Vegetation Associations            35. Open Spaces w/ Little Vegetation     36. Wetlands
+37. Clouds/Shadows                                38. Park                                 39. Snow
+40. Fish Pond                                     41. Stadium                              42. Square
+43. Overpass                                      44. Railway Station                      45. Airport
+46. Pervious Surface                              47. Coniferous                           48. Deciduous
+49. Brushwood                                     50. Vineyard                             51. Plowed Land
+52. Swimming Pool                                 53. Clear Cut                            54. Mixed
+55. Ligneous                                      56. Greenhouse                           57. Cropland
+58. Grass                                         59. Tundra                               60. Impervious
+61. Low Vegetation                                62. Tree                                 63. Car
+64. Large-Vehicle                                 65. Swimming-Pool                        66. Helicopter
+67. Bridge                                        68. Plane                                69. Ship
+70. Soccer-Ball-Field                             71. Basketball-Court                     72. Ground-Track-Field
+73. Small-Vehicle                                 74. Baseball-Diamond                     75. Tennis-Court
+76. Roundabout                                    77. Storage-Tank                         78. Harbor
+79. Container-Crane                               80. Airport                              81. Helipad
+82. Chimney                                       83. Expressway-Service-Area              84. Expressway-Toll-Station
+85. Dam                                           86. GolfField                            87. Windmill
+88. A220                                          89. A321                                 90. A330
+91. A350                                          92. ARJ21                                93. Boeing737
+94. Boeing747                                     95. Boeing777                            96. Boeing787
+97. Bus                                           98. C919                                 99. Cargo-Truck
+100. Dry-Cargo-Ship                               101. Dump-Truck                          102. Engineering-Ship
+103. Excavator                                    104. Fishing-Boat                        105. Intersection
+106. Liquid-Cargo-Ship                            107. Motorboat                           108. Other-Airplane
+109. Other-Ship                                   110. Other-Vehicle                       111. Passenger-Ship
+112. Tractor                                      113. Trailer                             114. Truck-Tractor
+115. Tugboat                                      116. Van                                 117. Warship
+
+
+
+
+                                                              14
+                                                 Table 15. Category Statistics of GeoSeg-Bench
+
+ID    Name                          Count (%)       ID    Name                        Count (%)     ID    Name                      Count (%)
+1     Urban Land                    37 (0.53%)      2     Agriculture Land            207 (2.97%)   3     Rangeland                 24 (0.34%)
+4     Forest Land                   97 (1.39%)      5     Water                       260 (3.74%)   6     Barren Land               226 (3.25%)
+7     Low Vegetation / Field        51 (0.73%)      8     Impervious (Other)          2 (0.03%)     9     Road                      478 (6.87%)
+10    Industrial Land               329 (4.73%)     11    Urban Residential           196 (2.82%)   12    Rural Residential         378 (5.43%)
+13    Paddy Field                   118 (1.70%)     14    Irrigated Land              398 (5.72%)   15    Dry Cropland              77 (1.11%)
+16    Garden Plot                   101 (1.45%)     17    Arbor Woodland              176 (2.53%)   18    Shrub Land                69 (0.99%)
+19    Natural Grassland             92 (1.32%)      20    Artificial Grassland        82 (1.18%)    21    River                     240 (3.45%)
+22    Lake                          85 (1.22%)      23    Pond                        149 (2.14%)   24    Background                11 (0.16%)
+                                                          Industrial, Commercial,
+                                                                                                          Mine, Dump And
+25    Building                      154 (2.21%)     26    Public, Military, Private   51 (0.73%)    27                              17 (0.24%)
+                                                                                                          Construction Sites
+                                                          And Transport Units
+      Artificial Non-Agricultural                         Arable Land
+28                                  30 (0.43%)      29                                29 (0.42%)    30    Permanent Crops           18 (0.26%)
+      Vegetated Areas                                     (Annual Crops)
+                                                          Herbaceous Vegetation                           Open Spaces With Little
+31    Pastures                      50 (0.72%)      34                                31 (0.45%)    35                              24 (0.34%)
+                                                          Associations                                    Or No Vegetation
+36    Wetlands                      31 (0.45%)      38    Park                        10 (0.14%)    39    Snow                      15 (0.22%)
+40    Fish Pond                     13 (0.19%)      41    Stadium                     34 (0.49%)    42    Square                    13 (0.19%)
+43    Overpass                      76 (1.09%)      44    Railway Station             27 (0.39%)    45    Airport                   3 (0.04%)
+46    Pervious Surface              29 (0.42%)      47    Coniferous                  10 (0.14%)    48    Deciduous                 29 (0.42%)
+49    Brushwood                     19 (0.27%)      50    Vineyard                    20 (0.29%)    51    Plowed Land               19 (0.27%)
+52    Swimming Pool                 37 (0.53%)      53    Clear Cut                   3 (0.04%)     56    Greenhouse                8 (0.11%)
+57    Cropland                      92 (1.32%)      58    Grass                       67 (0.96%)    60    Impervious                59 (0.85%)
+61    Low Vegetation                15 (0.22%)      62    Tree                        50 (0.72%)    63    Car                       62 (0.89%)
+64    Large-Vehicle                 134 (1.93%)     65    Swimming-Pool               37 (0.53%)    66    Helicopter                5 (0.07%)
+67    Bridge                        67 (0.96%)      68    Plane                       304 (4.37%)   69    Ship                      151 (2.17%)
+70    Soccer-Ball-Field             65 (0.93%)      71    Basketball-Court            72 (1.03%)    72    Ground-Track-Field        47 (0.68%)
+73    Small-Vehicle                 65 (0.93%)      74    Baseball-Diamond            85 (1.22%)    75    Tennis-Court              245 (3.52%)
+76    Roundabout                    53 (0.76%)      77    Storage-Tank                80 (1.15%)    78    Harbor                    199 (2.86%)
+79    Container-Crane               6 (0.09%)       80    Airport                     45 (0.65%)    82    Chimney                   20 (0.29%)
+83    Expressway-Service-Area       8 (0.11%)       84    Expressway-Toll-Station     55 (0.79%)    85    Dam                       19 (0.27%)
+86    GolfField                     10 (0.14%)      87    Windmill                    3 (0.04%)     90    A330                      4 (0.06%)
+94    Boeing747                     3 (0.04%)       95    Boeing777                   1 (0.01%)     96    Boeing787                 1 (0.01%)
+97    Bus                           3 (0.04%)       99    Cargo-Truck                 15 (0.22%)    100   Dry-Cargo-Ship            32 (0.46%)
+101   Dump-Truck                    14 (0.20%)      102   Engineering-Ship            4 (0.06%)     103   Excavator                 4 (0.06%)
+104   Fishing-Boat                  2 (0.03%)       105   Intersection                22 (0.32%)    106   Liquid-Cargo-Ship         13 (0.19%)
+107   Motorboat                     7 (0.10%)       108   Other-Airplane              1 (0.01%)     110   Other-Vehicle             1 (0.01%)
+111   Passenger-Ship                10 (0.14%)      113   Trailer                     3 (0.04%)     114   Truck-Tractor             3 (0.04%)
+115   Tugboat                       1 (0.01%)       116   Van                         5 (0.07%)     117   Warship                   6 (0.09%)
+
+
+
+
+                                                                        15
+Figure 13. Additional samples of GeoSeg-1M.
+
+
+
+                    16
+Figure 14. Additional samples of GeoSeg-Bench.
+
+
+
+                     17
+Figure 15. Additional samples of model prediction by UniGeoSeg.
+
+
+
+
+                              18
