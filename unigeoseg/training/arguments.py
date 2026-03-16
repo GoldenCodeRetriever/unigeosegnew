@@ -64,7 +64,6 @@ class DataArguments:
         default=None,
         metadata={"help": "Number of mixed-task samples drawn per epoch. Defaults to the sum of all task-group sizes."},
     )
-    dataloader_num_workers: int = field(default=4)
     manifest_image_root: Optional[str] = field(default=None)
     manifest_mask_root: Optional[str] = field(default=None)
 
