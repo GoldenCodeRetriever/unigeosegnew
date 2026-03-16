@@ -713,6 +713,13 @@ class UniGeoSeg(PhiForCausalLM, LlavaMetaForCausalLM):
         new_seg_query_masks = [] if seg_query_mask is not None else None
         new_refer_embedding_indices = [] if refer_embedding_indices is not None else None
 
+        if prompt_type is None:
+            # 根据是否传入了 token_answer_id 来推断任务类型
+            if token_answer_id is not None:
+                prompt_type = ['reason'] * len(input_ids)
+            else:
+                prompt_type = ['ref'] * len(input_ids)
+
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if use_seg_query:
                 cur_seg_query_mask = seg_query_mask[batch_idx]
