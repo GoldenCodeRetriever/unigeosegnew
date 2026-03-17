@@ -426,7 +426,6 @@ class InstructionDataCollator:
             "token_answer_id": [instance.get("token_answer_id") for instance in instances],
             "refer_embedding_indices": refer_embedding_indices,
             "answer_embedding_indices": answer_embedding_indices,
-            "image_name": [instance.get("image_name") for instance in instances],
         }
 
 

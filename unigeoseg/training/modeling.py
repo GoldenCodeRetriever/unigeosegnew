@@ -48,7 +48,7 @@ def build_model(model_args, training_args) -> Tuple[UniGeoSeg, object]:
         use_seg_query=model_args.use_seg_query,
         torch_dtype=torch_dtype,
         trust_remote_code=model_args.trust_remote_code,
-        low_cpu_mem_usage=True,
+        low_cpu_mem_usage=False,
     )
 
     if model.get_vision_tower() is None:

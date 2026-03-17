@@ -1,9 +1,25 @@
+import inspect
 import logging
 
-from transformers import TrainerCallback
+from transformers import Trainer, TrainerCallback
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+class UniGeoSegTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._accepted_input_keys = set(inspect.signature(self.model.forward).parameters.keys())
+
+    def _prepare_inputs(self, inputs):
+        prepared = super()._prepare_inputs(inputs)
+        dropped_keys = [key for key in list(prepared.keys()) if key not in self._accepted_input_keys]
+        for key in dropped_keys:
+            prepared.pop(key)
+        if dropped_keys:
+            LOGGER.debug("Dropped unsupported batch keys: %s", dropped_keys)
+        return prepared
 
 
 class ProgressiveTaskCallback(TrainerCallback):

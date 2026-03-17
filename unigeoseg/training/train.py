@@ -2,13 +2,13 @@ import logging
 import math
 
 import transformers
-from transformers import HfArgumentParser, Trainer, set_seed
+from transformers import HfArgumentParser, set_seed
 
 from unigeoseg import conversation as conversation_lib
 from unigeoseg.training.arguments import DataArguments, ModelArguments, UniGeoSegTrainingArguments
 from unigeoseg.training.data import InstructionDataCollator, ResampledMultiTaskDataset, build_task_groups, summarize_task_groups
 from unigeoseg.training.modeling import build_model, build_tokenizer, count_parameters
-from unigeoseg.training.trainer import ProgressiveTaskCallback
+from unigeoseg.training.trainer import ProgressiveTaskCallback, UniGeoSegTrainer
 
 
 LOGGER = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def main():
         reasoning_weight_end=training_args.reasoning_weight_end,
     )
 
-    trainer = Trainer(
+    trainer = UniGeoSegTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
