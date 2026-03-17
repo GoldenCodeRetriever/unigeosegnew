@@ -476,6 +476,8 @@ class RSRSDataset(Dataset):
         # 1. 加载并预处理图像
         img_path = os.path.join(self.base_data_path, sample["img"])
         image = cv2.imread(img_path)
+        if image is None:
+            raise FileNotFoundError(f"【图片读取失败】找不到文件或文件已损坏: {img_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # 转为RGB
         processed_image = preprocess_image(image, self.image_size)  # 尺寸调整+padding
         processed_image = (torch.tensor(processed_image) - self.pixel_mean) / self.pixel_std  # 归一化
@@ -584,7 +586,7 @@ class DataCollector(object):
         
         for data_dict in data_dicts:
             for key in ['input_ids', 'labels', 'image', 'prompt_type']:
-                del data_dict[key]
+                data_dict.pop(key, None)
 
         if 'dataset_type' in data_dicts[0]:
             batch['dataset_type'] = [data_dict['dataset_type'] for data_dict in data_dicts]
